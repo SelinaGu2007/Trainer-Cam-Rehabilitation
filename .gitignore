@@ -1,0 +1,63 @@
+
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ===== Qt / Qt Creator =====
+*.pro.user*
+*.qmake.stash
+.qtc_clangd/
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+
+# ===== Build outputs (Qt / CMake / generic) =====
+build*/
+**/build/
+**/cmake-build-*/
+**/debug/
+**/release/
+Makefile*
+*.o
+*.obj
+
+# ===== Visual Studio =====
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.ipch
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# PyInstaller outputs
+**/dist/
+**/build/
+
+# ===== Binaries / Libraries =====
+*.dll
+*.exe
+*.pyd
+*.lib
+*.a
+*.pdb
+
+# ===== Large data / videos =====
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+data/
+videos/
+
+# simple_3d_viewer dependencies (NuGet packages, large)
+/simple_3d_viewer/packages/
+
