@@ -250,19 +250,41 @@ def getBodiesFromFile(filename: str, n_joints: int = 32):
     return bodies
 
 
-def getScore(element_distance):
+def getScore(element_distance, good=30.0, bad=120.0):
     """
-    Convert element-wise DTW distance into a 0-100 score.
-    Guarded against empty inputs.
+    Stable 0-100 score from element-wise DTW distances.
+
+    - element_distance: list/array of nonnegative distances
+    - good: typical RMS distance for a good match (score ~ 90-100)
+    - bad: RMS distance for a poor match (score ~ 0-20)
+
+    Returns: float in [0, 100]
     """
     if element_distance is None or len(element_distance) == 0:
-        return 0
-    punishment = [(math.sqrt(dis) - 100) ** 1.5 for dis in element_distance if math.sqrt(dis) > 100]
-    score_a = (sum(punishment) * len(punishment) / len(element_distance)) if len(element_distance) else 0
-    score_b = math.sqrt(sum(element_distance) / len(element_distance))
-    score = 0.2 * score_a + 0.8 * score_b
-    val = 100 - 0.1 * score
-    return val if val > 0 else 0
+        return 0.0
+
+    d = np.asarray(element_distance, dtype=np.float32)
+    d = d[np.isfinite(d)]
+    if d.size == 0:
+        return 0.0
+
+    rms = float(np.sqrt(np.mean(d)))
+
+    # Outlier penalty: fraction of frames above "bad" threshold
+    out_frac = float(np.mean(np.sqrt(d) > bad))
+
+    # Map rms into [0,1] then to [0,100]
+    # Clamp for stability
+    t = (rms - good) / max(bad - good, 1e-6)
+    t = min(max(t, 0.0), 1.0)
+
+    score = 100.0 * (1.0 - t)
+
+    # Apply mild outlier penalty (max -15 points)
+    score -= 15.0 * out_frac
+
+    return max(0.0, min(100.0, score))
+
 
 
 def getargs(args=sys.argv[1:]):
