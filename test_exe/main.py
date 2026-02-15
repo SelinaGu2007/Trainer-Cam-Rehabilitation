@@ -333,7 +333,9 @@ def main():
     element_distance = DTW.get_elementwise_distances(Angle_B, Angle_A, paths)
     min_paths, min_distance = DTW.getMinPath_Distance(paths, element_distance)
 
-    max_Index, max_Item = DTW.getMaxIndex_Item(min_distance, 1)
+    # Use a short window so we find the worst *segment* (less noisy than a single frame)
+    max_Index, max_Item = DTW.getMaxIndex_Item(min_distance, 10)
+
 
     if function == 'score':
         score = getScore(min_distance)
