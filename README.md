@@ -6,8 +6,8 @@ A rehab exercise coaching prototype that records human motion, extracts 3D skele
 
 ### simple_3d_viewer/ (C++ / Azure Kinect Body Tracking / OpenCV)
 Records to a folder path (passed as argv[1]) and produces:
-- output2.txt — per-frame body skeleton joints (32 joints)
-- imamge_idx_<frame>.jpg — RGB frames saved per frame
+- output2.txt - per-frame body skeleton joints (32 joints)
+- imamge_idx_<frame>.jpg - RGB frames saved per frame
 
 ### TutorClient/ (Qt/C++)
 Tutor-side desktop UI:
