@@ -198,7 +198,13 @@ void save_color_image( k4a_capture_t capture ,int idx, const std::string& folder
         int width = k4a_image_get_width_pixels(color_image);
         int height = k4a_image_get_height_pixels(color_image);
         cv::Mat colorMat(cv::Size(width, height), CV_8UC4, k4a_image_get_buffer(color_image));
-        cv::imwrite(folderPath + "\\imamge_idx_" + std::to_string(idx) + ".jpg", colorMat);
+        
+        // Save frame image with both legacy (typo) and corrected filename for backward compatibility
+        const std::string legacy_path = folderPath + "\\imamge_idx_" + std::to_string(idx) + ".jpg";
+        const std::string fixed_path  = folderPath + "\\image_idx_"  + std::to_string(idx) + ".jpg";
+        cv::imwrite(legacy_path, colorMat);
+        cv::imwrite(fixed_path,  colorMat);
+
         k4a_image_release(color_image);
     }
 
