@@ -44,3 +44,20 @@ A recording folder is expected to contain:
 ## Notes
 - Build outputs, binaries, large dependencies (NuGet packages, OpenCV DLLs, PyInstaller dist/build) are intentionally ignored via .gitignore.
 - Recording videos/images can contain sensitive data; do not upload real patient data to public repos.
+
+## Run the Python analysis (from source)
+
+1) Install dependencies:
+\\\
+pip install -r requirements.txt
+\\\
+
+2) Run the analysis script (examples):
+\\\
+python test_exe/main.py --folder_tutor "PATH_TO_TUTOR_SESSION" --folder_customer "PATH_TO_CUSTOMER_SESSION" --function score
+python test_exe/main.py --folder_tutor "PATH_TO_TUTOR_SESSION" --folder_customer "PATH_TO_CUSTOMER_SESSION" --function showVideos
+\\\
+
+Notes:
+- Each session folder is expected to contain \output2.txt\ and \imamge_idx_<frame>.jpg\ frames.
+- \showVideos\ writes outputs under \<customer_folder>\\analyse\\\.
