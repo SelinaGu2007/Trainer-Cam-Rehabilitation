@@ -61,3 +61,8 @@ python test_exe/main.py --folder_tutor "PATH_TO_TUTOR_SESSION" --folder_customer
 Notes:
 - Each session folder is expected to contain \output2.txt\ and \imamge_idx_<frame>.jpg\ frames.
 - \showVideos\ writes outputs under \<customer_folder>\\analyse\\\.
+
+## System diagram
+
+![System diagram](docs/system_diagram.png)
+
