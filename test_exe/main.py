@@ -327,7 +327,9 @@ def main():
     Angle_A = GaussianFilter(Angle_A, sigma=3)
     Angle_B = GaussianFilter(Angle_B, sigma=3)
 
-    paths = DTW.getPath(Angle_B, Angle_A)
+    # Constrain DTW warping to a reasonable band for speed + stability
+    paths = DTW.getPath(Angle_B, Angle_A, window=30)
+
     element_distance = DTW.get_elementwise_distances(Angle_B, Angle_A, paths)
     min_paths, min_distance = DTW.getMinPath_Distance(paths, element_distance)
 
