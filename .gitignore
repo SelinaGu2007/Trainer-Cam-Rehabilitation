@@ -61,3 +61,8 @@ videos/
 # simple_3d_viewer dependencies (NuGet packages, large)
 /simple_3d_viewer/packages/
 
+
+# Allow small public sample data (keep the rest of data/ ignored)
+!data/samples/
+!data/samples/**
+
