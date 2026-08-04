@@ -37,8 +37,10 @@ public:
     void moveWindow(const wchar_t* windowName);
 private:
     Ui::RecordConfiguation *ui;
-    QString TutorFolder ="D:\\Image\\";
-    QString RecordingFolder ="D:\\Image_test\\";
+    QString TutorFolder;
+    QString RecordingFolder;
+    QString RecorderProgram;
+    QString VideoPlayerProgram;
 
 
 private slots:

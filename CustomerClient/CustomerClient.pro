@@ -10,6 +10,8 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    ../common/appconfig.cpp \
+    ../common/applogger.cpp \
     ClientStuff.cpp \
     analyse.cpp \
     login.cpp \
@@ -18,6 +20,8 @@ SOURCES += \
     recordconfiguation.cpp
 
 HEADERS += \
+    ../common/appconfig.h \
+    ../common/applogger.h \
     ClientStuff.h \
     analyse.h \
     login.h \
@@ -37,3 +41,5 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     resources.qrc
+
+INCLUDEPATH += ../common

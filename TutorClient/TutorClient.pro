@@ -9,6 +9,8 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    ../common/appconfig.cpp \
+    ../common/applogger.cpp \
     login.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -16,6 +18,8 @@ SOURCES += \
     serverstuff.cpp
 
 HEADERS += \
+    ../common/appconfig.h \
+    ../common/applogger.h \
     login.h \
     mainwindow.h \
     record.h \
@@ -25,6 +29,8 @@ FORMS += \
     login.ui \
     mainwindow.ui \
     record.ui
+
+INCLUDEPATH += ../common
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

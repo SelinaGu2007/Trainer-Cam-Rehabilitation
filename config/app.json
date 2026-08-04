@@ -1,0 +1,15 @@
+{
+  "project_root": "..",
+  "paths": {
+    "tutor_recordings": "data/runtime/tutor",
+    "customer_recordings": "data/runtime/customer",
+    "logs": "logs",
+    "recorder": "simple_3d_viewer/build/bin/Release/simple_3d_viewer.exe",
+    "video_player": "show_videos/dist/showvideo/showvideo.exe",
+    "analyzer": "test_exe/dist/main/main.exe"
+  },
+  "network": {
+    "host": "127.0.0.1",
+    "port": 6547
+  }
+}

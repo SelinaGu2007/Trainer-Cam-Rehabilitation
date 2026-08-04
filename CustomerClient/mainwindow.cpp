@@ -2,12 +2,15 @@
 #include "ui_mainwindow.h"
 #include "recordconfiguation.h"
 #include "analyse.h"
+#include "appconfig.h"
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    client = new ClientStuff("localhost", 6547);
+    const AppConfig &config = AppConfig::instance();
+    client = new ClientStuff(config.host, config.port, this);
+    qInfo() << "Customer client configured for" << config.host << config.port;
     connect(client, &ClientStuff::hasReadSome, this, &MainWindow::receivedSomething);
     // FIXME change this connection to the new syntax
     connect(client->tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),

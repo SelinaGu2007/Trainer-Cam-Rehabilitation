@@ -1,12 +1,16 @@
 #include "record.h"
 #include "ui_record.h"
+#include "appconfig.h"
 #pragma comment(lib,"user32")
 Record::Record(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::Record)
 {
     ui->setupUi(this);
-     connect(this, &Record::showEvent, this, &Record::onShowEvent);
+    const AppConfig &config = AppConfig::instance();
+    TutorFolder = config.tutorRecordingsDir;
+    RecorderProgram = config.recorderProgram;
+    VideoPlayerProgram = config.videoPlayerProgram;
 }
 
 Record::~Record()
@@ -62,12 +66,12 @@ void Record::on_pushButtonRecord_clicked()
     if(!ok |directoryName.isEmpty()){
        return;
     }
-    QString directorypath = TutorFolder+directoryName;
+    QString directorypath = QDir(TutorFolder).filePath(directoryName);
      QDir dir(directorypath);
      if(!dir.exists()){
          dir.mkpath(".");
      }
-      QString program = ".\\record\\build\\bin\\Debug\\simple_3d_viewer.exe ";
+      QString program = RecorderProgram;
       QProcess *process = new QProcess(this);
       process->start(program, QStringList() << directorypath);
       moveWindowToMiddle(L"Color_Image",directorypath+"\\flag.txt");
@@ -86,15 +90,16 @@ void Record::on_pushButtonDispaly_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dir = TutorFolder + subdir1;
-    QString program = ".\\videoshow\\dist\\showvideo\\showvideo.exe";
+    QString dir = QDir(TutorFolder).filePath(subdir1);
+    QString program = VideoPlayerProgram;
 
     // Create process
     QProcess *process = new QProcess(this);
 
     // Connect process signals to slots
-    connect(process, SIGNAL(finished(int, QProcess::ExitStatus)), this, SLOT(processFinished(int, QProcess::ExitStatus)));
-    connect(process, SIGNAL(errorOccurred(QProcess::ProcessError)), this, SLOT(processError(QProcess::ProcessError)));
+    connect(process, &QProcess::errorOccurred, this, [program](QProcess::ProcessError error) {
+        qWarning() << "Unable to start video player" << program << error;
+    });
 
     // Start the process
     process->start(program, QStringList() << "--folder" << dir);
@@ -113,7 +118,7 @@ void Record::on_pushButtonDelete_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dirpath = TutorFolder+subdir1;
+    QString dirpath = QDir(TutorFolder).filePath(subdir1);
     QDir dir(dirpath);
 
     // Check if the directory exists

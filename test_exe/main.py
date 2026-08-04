@@ -1,13 +1,18 @@
 import math
+import logging
 import numpy as np
 import DTW as DTW
-from view_image import view_imageseries, showImage, showvideo
-from save3D import save3D
-import cv2
 import argparse
 import sys
 import os
 from typing import List, Tuple, Dict, Any, Optional
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+LOGGER = logging.getLogger("trainer_cam.analysis")
 
 # Pairs of joint indices used as "features" (each pair defines a skeleton segment)
 features: List[Tuple[int, int]] = [
@@ -157,6 +162,17 @@ def GaussianFilter(A: np.ndarray, sigma: float = 1.0):
     if sigma <= 0:
         return A
     B = np.zeros_like(A)
+    if cv2 is None:
+        radius = max(1, int(round(3 * sigma)))
+        x = np.arange(-radius, radius + 1, dtype=np.float32)
+        kernel = np.exp(-(x * x) / (2 * sigma * sigma))
+        kernel /= np.sum(kernel)
+        for i in range(A.shape[1]):
+            for j in range(A.shape[2]):
+                padded = np.pad(A[:, i, j], radius, mode='edge')
+                B[:, i, j] = np.convolve(padded, kernel, mode='valid')
+        return B
+
     for i in range(A.shape[1]):
         for j in range(A.shape[2]):
             column = A[:, i, j].astype(np.float32).reshape(-1, 1)
@@ -292,6 +308,7 @@ def getargs(args=sys.argv[1:]):
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
     parser.add_argument("--function", default='NULL', help='select from showVideos,score,showMaxDiffetence')
+    parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(args)
 
 
@@ -300,6 +317,11 @@ def main():
     folder_tutor = args.folder_tutor
     folder_customer = args.folder_customer
     function = args.function
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    LOGGER.info("Starting analysis function=%s tutor=%s customer=%s", function, folder_tutor, folder_customer)
 
     if folder_tutor == "NULL" or folder_customer == "NULL":
         raise ValueError("Please provide --folder_tutor and --folder_customer")
@@ -312,13 +334,17 @@ def main():
         raise FileNotFoundError(output_customer)
 
     analyse_folder = os.path.join(folder_customer, "analyse")
-    if os.path.exists(analyse_folder) and os.listdir(analyse_folder):
+    if function == "showVideos" and os.path.exists(analyse_folder) and os.listdir(analyse_folder):
         # If analysis already exists, just show it
+        from view_image import showvideo
         showvideo(analyse_folder)
         return 0
 
     bodies_A = getBodiesFromFile(output_tutor)
     bodies_B = getBodiesFromFile(output_customer)
+    if not bodies_A or not bodies_B:
+        raise ValueError("Both recordings must contain at least one valid body frame")
+    LOGGER.info("Loaded frames tutor=%d customer=%d", len(bodies_A), len(bodies_B))
 
     Angle_A = np.array(getAnglesToaxle(bodies_A, features, blind=False), dtype=np.float32)
     Angle_B = np.array(getAnglesToaxle(bodies_B, features, blind=False), dtype=np.float32)
@@ -327,10 +353,15 @@ def main():
     Angle_A = GaussianFilter(Angle_A, sigma=3)
     Angle_B = GaussianFilter(Angle_B, sigma=3)
 
-    # Constrain DTW warping to a reasonable band for speed + stability
-    paths = DTW.getPath(Angle_B, Angle_A, window=30)
+    # dtaidistance expects one feature vector per time step. Flatten the
+    # (axis, segment) dimensions while retaining the original arrays for plots.
+    sequence_A = Angle_A.reshape(Angle_A.shape[0], -1)
+    sequence_B = Angle_B.reshape(Angle_B.shape[0], -1)
 
-    element_distance = DTW.get_elementwise_distances(Angle_B, Angle_A, paths)
+    # Constrain DTW warping to a reasonable band for speed + stability
+    paths = DTW.getPath(sequence_B, sequence_A, window=30)
+
+    element_distance = DTW.get_elementwise_distances(sequence_B, sequence_A, paths)
     min_paths, min_distance = DTW.getMinPath_Distance(paths, element_distance)
 
     # Use a short window so we find the worst *segment* (less noisy than a single frame)
@@ -342,6 +373,8 @@ def main():
         print(score)
 
     elif function == "showVideos":
+        from save3D import save3D
+        from view_image import view_imageseries
         plot_folder = os.path.join(folder_customer, "plot")
         if not os.path.exists(plot_folder):
             os.mkdir(plot_folder)
@@ -358,6 +391,7 @@ def main():
         )
 
     elif function == "showMaxDiffetence":
+        from view_image import showImage
         showImage(
             os.path.join(folder_customer, f"imamge_idx_{min_paths[max_Index][0]}.jpg"),
             os.path.join(folder_tutor, f"imamge_idx_{min_paths[max_Index][1]}.jpg"),

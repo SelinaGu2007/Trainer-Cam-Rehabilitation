@@ -1,7 +1,46 @@
 import numpy as np
 from typing import Iterable, List, Sequence, Tuple, Optional
-from dtaidistance import dtw_ndim
-from dtaidistance import dtw_visualisation as dtwvis
+
+try:
+    from dtaidistance import dtw_ndim
+    from dtaidistance import dtw_visualisation as dtwvis
+except ImportError:  # A deterministic NumPy fallback keeps offline scoring usable.
+    dtw_ndim = None
+    dtwvis = None
+
+
+def _fallback_path(s1: np.ndarray, s2: np.ndarray, window: Optional[int] = None) -> List[Tuple[int, int]]:
+    a = np.asarray(s1, dtype=np.float64).reshape(len(s1), -1)
+    b = np.asarray(s2, dtype=np.float64).reshape(len(s2), -1)
+    if len(a) == 0 or len(b) == 0:
+        return []
+
+    band = max(len(a), len(b)) if window is None else max(int(window), abs(len(a) - len(b)))
+    cost = np.full((len(a) + 1, len(b) + 1), np.inf, dtype=np.float64)
+    cost[0, 0] = 0.0
+    for i in range(1, len(a) + 1):
+        start = max(1, i - band)
+        stop = min(len(b), i + band) + 1
+        for j in range(start, stop):
+            local = float(np.sum((a[i - 1] - b[j - 1]) ** 2))
+            cost[i, j] = local + min(cost[i - 1, j], cost[i, j - 1], cost[i - 1, j - 1])
+
+    i, j = len(a), len(b)
+    if not np.isfinite(cost[i, j]):
+        raise ValueError("DTW window is too small to connect both sequences")
+    path: List[Tuple[int, int]] = []
+    while i > 0 and j > 0:
+        path.append((i - 1, j - 1))
+        candidates = (cost[i - 1, j - 1], cost[i - 1, j], cost[i, j - 1])
+        step = int(np.argmin(candidates))
+        if step == 0:
+            i, j = i - 1, j - 1
+        elif step == 1:
+            i -= 1
+        else:
+            j -= 1
+    path.reverse()
+    return path
 
 
 # ----------------------------
@@ -19,9 +58,13 @@ def getDistance(S1: np.ndarray, S2: np.ndarray, *, window: Optional[int] = None)
     Returns:
         DTW distance (float).
     """
-    if window is None:
-        return float(dtw_ndim.distance(S1, S2))
-    return float(dtw_ndim.distance(S1, S2, window=window))
+    if dtw_ndim is not None:
+        if window is None:
+            return float(dtw_ndim.distance(S1, S2))
+        return float(dtw_ndim.distance(S1, S2, window=window))
+    path = _fallback_path(S1, S2, window)
+    distances = get_elementwise_distances(S1, S2, path)
+    return float(np.sqrt(np.sum(distances)))
 
 
 def getPath(s1: np.ndarray, s2: np.ndarray, *, window: Optional[int] = None) -> List[Tuple[int, int]]:
@@ -35,9 +78,11 @@ def getPath(s1: np.ndarray, s2: np.ndarray, *, window: Optional[int] = None) -> 
     Returns:
         List of (i, j) indices in the warping path.
     """
-    if window is None:
-        return dtw_ndim.warping_path(s1, s2)
-    return dtw_ndim.warping_path(s1, s2, window=window)
+    if dtw_ndim is not None:
+        if window is None:
+            return dtw_ndim.warping_path(s1, s2)
+        return dtw_ndim.warping_path(s1, s2, window=window)
+    return _fallback_path(s1, s2, window)
 
 
 def get_elementwise_distances(s1: np.ndarray, s2: np.ndarray, path: Sequence[Tuple[int, int]]) -> List[float]:
@@ -63,8 +108,10 @@ def get_elementwise_distances(s1: np.ndarray, s2: np.ndarray, path: Sequence[Tup
     a = np.asarray(s1)[i]
     b = np.asarray(s2)[j]
     diff = a - b
-    # sum over feature dims if needed
-    d = np.sum(diff * diff, axis=-1)
+    # Sum every feature dimension while preserving one scalar per path pair.
+    # Motion features are shaped (time, axis, segment), not just (time, feature).
+    feature_axes = tuple(range(1, diff.ndim))
+    d = np.sum(diff * diff, axis=feature_axes) if feature_axes else diff * diff
     return d.astype(np.float32).tolist()
 
 
@@ -82,7 +129,19 @@ def plotWrap(s1: np.ndarray, s2: np.ndarray, filename: str, *, window: Optional[
         window: optional Sakoe-Chiba band
     """
     path = getPath(s1, s2, window=window)
-    dtwvis.plot_warping(s1, s2, path, filename)
+    if dtwvis is not None:
+        dtwvis.plot_warping(s1, s2, path, filename)
+        return
+
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(2, 1, sharex=False)
+    axes[0].plot(np.asarray(s1), color="tab:blue")
+    axes[0].set_title("Customer sequence")
+    axes[1].plot(np.asarray(s2), color="tab:orange")
+    axes[1].set_title("Tutor sequence")
+    fig.tight_layout()
+    fig.savefig(filename)
+    plt.close(fig)
 
 
 # ----------------------------

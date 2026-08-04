@@ -34,7 +34,9 @@ private slots:
 
 private:
     Ui::Record *ui;
-    QString TutorFolder ="D:\\Image\\";
+    QString TutorFolder;
+    QString RecorderProgram;
+    QString VideoPlayerProgram;
 
 protected:
     void showEvent(QShowEvent *event) override;

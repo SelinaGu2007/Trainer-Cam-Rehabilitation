@@ -44,8 +44,11 @@ private slots:
 private:
     Ui::MainWindow *ui;
     ServerStuff *server;
-    QString CustomerFolder = "D:\\Image_test\\";
-    QString TutorFolder ="D:\\Image\\";
+    QString CustomerFolder;
+    QString TutorFolder;
+    QString VideoPlayerProgram;
+    QString AnalyzerProgram;
+    quint16 ServerPort = 6547;
 
 protected:
     void showEvent(QShowEvent *event) override;

@@ -29,8 +29,9 @@ private slots:
 
 private:
     Ui::Analyse *ui;
-    QString TutorFolder = "D://Image//";
-    QString MyRecordingFolder="D://Image_test//";
+    QString TutorFolder;
+    QString MyRecordingFolder;
+    QString AnalyzerProgram;
 
 protected:
     void showEvent(QShowEvent *event) override;

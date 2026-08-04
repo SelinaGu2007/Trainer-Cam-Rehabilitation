@@ -1,11 +1,18 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "appconfig.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    const AppConfig &config = AppConfig::instance();
+    CustomerFolder = config.customerRecordingsDir;
+    TutorFolder = config.tutorRecordingsDir;
+    VideoPlayerProgram = config.videoPlayerProgram;
+    AnalyzerProgram = config.analyzerProgram;
+    ServerPort = config.port;
     server = new ServerStuff(this);
     connect(server, &ServerStuff::gotNewMesssage,
             this, &MainWindow::gotNewMesssage);
@@ -14,7 +21,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(server, &ServerStuff::smbDisconnected,
             this, &MainWindow::smbDisconnectedFromServer);
 
-    connect(this,&MainWindow::showEvent,this,&MainWindow::onShowEvent);
 }
 
 MainWindow::~MainWindow()
@@ -73,8 +79,8 @@ void MainWindow::on_pushButtonDisplay_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dir = CustomerFolder + subdir1;
-    QString program = ".\\videoshow\\dist\\showvideo\\showvideo.exe";
+    QString dir = QDir(CustomerFolder).filePath(subdir1);
+    QString program = VideoPlayerProgram;
 
     // Create process
     QProcess *process = new QProcess(this);
@@ -97,12 +103,12 @@ void MainWindow::on_pushButtonAnalyse_clicked()
 
 
 
-    QString folder_tutor = TutorFolder+subdir1;
-    QString folder_customer = CustomerFolder+subdir2;
+    QString folder_tutor = QDir(TutorFolder).filePath(subdir1);
+    QString folder_customer = QDir(CustomerFolder).filePath(subdir2);
     QString dir1 = QDir::toNativeSeparators(folder_tutor); // Ensure correct path separators
     QString dir2 = QDir::toNativeSeparators(folder_customer); // Ensure correct path separators
 
-    QString program = ".\\test_exe\\dist\\main\\main.exe";
+    QString program = AnalyzerProgram;
     QStringList arguments;
     arguments << "--folder_tutor" << dir1 << "--folder_customer" << dir2 << "--function" << "showVideos";
 
@@ -110,8 +116,9 @@ void MainWindow::on_pushButtonAnalyse_clicked()
 
     QProcess *process = new QProcess(this);
     process->start(program, arguments);
-    connect(process, SIGNAL(finished(int, QProcess::ExitStatus)), this, SLOT(processFinished(int, QProcess::ExitStatus)));
-    connect(process, SIGNAL(errorOccurred(QProcess::ProcessError)), this, SLOT(processError(QProcess::ProcessError)));
+    connect(process, &QProcess::errorOccurred, this, [program](QProcess::ProcessError error) {
+        qWarning() << "Unable to start analyzer" << program << error;
+    });
     moveWindow(L"Ananlse_outcome",dir2+"//analyse");
 
 }
@@ -225,7 +232,7 @@ void MainWindow::gotNewMesssage(QString msg)
 
 void MainWindow::on_pushButtonConnection_clicked()
 {
-    if (!server->tcpServer->listen(QHostAddress::Any, 6547))
+    if (!server->tcpServer->listen(QHostAddress::Any, ServerPort))
     {
         ui->textEditLog->append(tr("<font color=\"red\"><b>Error!</b> The port is taken by some other service.</font>"));
         return;

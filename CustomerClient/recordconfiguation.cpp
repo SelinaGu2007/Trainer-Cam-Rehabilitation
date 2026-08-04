@@ -3,13 +3,18 @@
 #include <iostream>
 #include <string>
 #include <cstdio>
+#include "appconfig.h"
 #pragma comment(lib,"user32")
 RecordConfiguation::RecordConfiguation(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::RecordConfiguation)
 {
     ui->setupUi(this);
-    connect(this, &RecordConfiguation::showEvent, this, &RecordConfiguation::onShowEvent);
+    const AppConfig &config = AppConfig::instance();
+    TutorFolder = config.tutorRecordingsDir;
+    RecordingFolder = config.customerRecordingsDir;
+    RecorderProgram = config.recorderProgram;
+    VideoPlayerProgram = config.videoPlayerProgram;
 }
 
 RecordConfiguation::~RecordConfiguation()
@@ -66,15 +71,16 @@ void RecordConfiguation::on_pushButtonDispaly_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dir = TutorFolder + subdir1;
-    QString program = ".\\videoshow\\dist\\showvideo\\showvideo.exe";
+    QString dir = QDir(TutorFolder).filePath(subdir1);
+    QString program = VideoPlayerProgram;
 
     // Create process
     QProcess *process = new QProcess(this);
 
     // Connect process signals to slots
-    connect(process, SIGNAL(finished(int, QProcess::ExitStatus)), this, SLOT(processFinished(int, QProcess::ExitStatus)));
-    connect(process, SIGNAL(errorOccurred(QProcess::ProcessError)), this, SLOT(processError(QProcess::ProcessError)));
+    connect(process, &QProcess::errorOccurred, this, [program](QProcess::ProcessError error) {
+        qWarning() << "Unable to start video player" << program << error;
+    });
 
     // Start the process
     process->start(program, QStringList() << "--folder" << dir);
@@ -101,17 +107,17 @@ void RecordConfiguation::on_pushButtonRecord_clicked()
 
 
     QString formattedTime = currentDateTime.toString("yyyy-MM-dd-hh-mm");
-    QString dir = RecordingFolder+subdir1+"-follow-"+formattedTime;
+    QString dir = QDir(RecordingFolder).filePath(subdir1+"-follow-"+formattedTime);
 
     QDir dirname(dir);
     if(!dirname.exists()){
         dirname.mkpath(".");
     }
 
-    QString program = ".\\record\\build\\bin\\Debug\\simple_3d_viewer.exe ";
+    QString program = RecorderProgram;
 
-    QString dir1 = TutorFolder + subdir1;
-    QString program1 = ".\\videoshow\\dist\\showvideo\\showvideo.exe";
+    QString dir1 = QDir(TutorFolder).filePath(subdir1);
+    QString program1 = VideoPlayerProgram;
 
     // Create process
     QProcess *process = new QProcess(this);

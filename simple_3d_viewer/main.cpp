@@ -19,14 +19,27 @@
 #include <iomanip>
 #include <sstream> 
 #include <opencv2/opencv.hpp>
+#include <filesystem>
+
+std::tm ToLocalTime(std::time_t value)
+{
+    std::tm localTime{};
+#ifdef _WIN32
+    localtime_s(&localTime, &value);
+#else
+    localtime_r(&value, &localTime);
+#endif
+    return localTime;
+}
 
 
 void PrintUsage()
 {
+    printf("\nOUTPUT_FOLDER is required as the first argument.\n");
 #ifdef _WIN32
-    printf("\nUSAGE: (k4abt_)simple_3d_viewer.exe SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, DIRECTML, TENSORRT](optional) -model MODEL_PATH(optional)\n");
+    printf("\nUSAGE: simple_3d_viewer.exe OUTPUT_FOLDER SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, DIRECTML, TENSORRT](optional) -model MODEL_PATH(optional)\n");
 #else
-    printf("\nUSAGE: (k4abt_)simple_3d_viewer.exe SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, TENSORRT](optional)\n");
+    printf("\nUSAGE: simple_3d_viewer.exe OUTPUT_FOLDER SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, TENSORRT](optional)\n");
 #endif
     printf("  - SensorMode: \n");
     printf("      NFOV_UNBINNED (default) - Narrow Field of View Unbinned Mode [Resolution: 640x576; FOI: 75 degree x 65 degree]\n");
@@ -39,10 +52,10 @@ void PrintUsage()
 #endif
     printf("      TENSORRT - Use the TensorRT processing mode.\n");
     printf("      OFFLINE - Play a specified file. Does not require Kinect device\n");
-    printf("e.g.   (k4abt_)simple_3d_viewer.exe WFOV_BINNED CPU\n");
-    printf("e.g.   (k4abt_)simple_3d_viewer.exe CPU\n");
-    printf("e.g.   (k4abt_)simple_3d_viewer.exe WFOV_BINNED\n");
-    printf("e.g.   (k4abt_)simple_3d_viewer.exe OFFLINE MyFile.mkv\n");
+    printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 WFOV_BINNED CPU\n");
+    printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 CPU\n");
+    printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 WFOV_BINNED\n");
+    printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 OFFLINE MyFile.mkv\n");
 }
 
 void PrintAppUsage()
@@ -111,7 +124,8 @@ struct InputSettings
 
 bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettings)
 {
-    for (int i = 1; i < argc; i++)
+    // argv[1] is the recording output directory.
+    for (int i = 2; i < argc; i++)
     {
         std::string inputArg(argv[i]);
         if (inputArg == std::string("NFOV_UNBINNED"))
@@ -164,8 +178,8 @@ bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettin
         }
         else
         {
-            //printf("Error: command not understood: %s\n", inputArg.c_str());
-            return true;
+            printf("Error: command not understood: %s\n", inputArg.c_str());
+            return false;
         }
     }
     return true;
@@ -497,16 +511,43 @@ void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, cons
 
 int main(int argc, char** argv)
 {
+    if (argc < 2 || argv[1] == nullptr || std::string(argv[1]).empty())
+    {
+        PrintUsage();
+        return 2;
+    }
+
     InputSettings inputSettings;
     std::string basePath = argv[1];
+    std::error_code directoryError;
+    std::filesystem::create_directories(basePath, directoryError);
+    if (directoryError)
+    {
+        std::cerr << "Unable to create output directory: " << basePath
+                  << " (" << directoryError.message() << ")" << std::endl;
+        return 3;
+    }
+
     std::ofstream outputFile(basePath+"\\output2.txt");
+    if (!outputFile.is_open())
+    {
+        std::cerr << "Unable to open skeleton output file in: " << basePath << std::endl;
+        return 4;
+    }
+
+    std::ofstream sessionLog(basePath+"\\session.log", std::ios::app);
+    const auto startedAt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    const std::tm startedLocalTime = ToLocalTime(startedAt);
+    sessionLog << std::put_time(&startedLocalTime, "%Y-%m-%dT%H:%M:%S")
+               << " recorder_started output=" << basePath << std::endl;
     const std::string& ImagefileFloder = basePath;
-    std::cout<<ImagefileFloder << std::endl;
+    std::cout << "Recording output: " << ImagefileFloder << std::endl;
 
     if (!ParseInputSettingsFromArg(argc, argv, inputSettings))
     {
         // Print app usage if user entered incorrect arguments.
         PrintUsage();
+        sessionLog << "invalid_arguments" << std::endl;
         return -1;
     }
 
@@ -520,5 +561,10 @@ int main(int argc, char** argv)
         PlayFromDevice(inputSettings, outputFile, ImagefileFloder);
     }
     outputFile.close();
+    const auto finishedAt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    const std::tm finishedLocalTime = ToLocalTime(finishedAt);
+    sessionLog << std::put_time(&finishedLocalTime, "%Y-%m-%dT%H:%M:%S")
+               << " recorder_finished" << std::endl;
+    sessionLog.close();
     return 0;
 }

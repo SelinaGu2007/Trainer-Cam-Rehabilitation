@@ -1,5 +1,6 @@
 #include "analyse.h"
 #include "ui_analyse.h"
+#include "appconfig.h"
 
 #pragma comment(lib,"user32")
 
@@ -8,7 +9,10 @@ Analyse::Analyse(QWidget *parent) :
     ui(new Ui::Analyse)
 {
     ui->setupUi(this);
-    connect(this,&Analyse::showEvent,this,&Analyse::onShowEvent1);
+    const AppConfig &config = AppConfig::instance();
+    TutorFolder = config.tutorRecordingsDir;
+    MyRecordingFolder = config.customerRecordingsDir;
+    AnalyzerProgram = config.analyzerProgram;
 }
 
 Analyse::~Analyse()
@@ -70,12 +74,12 @@ void Analyse::on_pushButtonAnalyse_clicked()
 
 
 
-    QString folder_tutor = TutorFolder+subdir1;
-    QString folder_customer = MyRecordingFolder+subdir2;
+    QString folder_tutor = QDir(TutorFolder).filePath(subdir1);
+    QString folder_customer = QDir(MyRecordingFolder).filePath(subdir2);
     QString dir1 = QDir::toNativeSeparators(folder_tutor); // Ensure correct path separators
     QString dir2 = QDir::toNativeSeparators(folder_customer); // Ensure correct path separators
 
-    QString program = ".\\test_exe\\dist\\main\\main.exe";
+    QString program = AnalyzerProgram;
     QStringList arguments;
     arguments << "--folder_tutor" << dir1 << "--folder_customer" << dir2 << "--function" << "showVideos";
 
@@ -100,7 +104,7 @@ void Analyse::on_pushButtonDelete_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dirpath = MyRecordingFolder+subdir1;
+    QString dirpath = QDir(MyRecordingFolder).filePath(subdir1);
     QDir dir(dirpath);
 
     // Check if the directory exists
