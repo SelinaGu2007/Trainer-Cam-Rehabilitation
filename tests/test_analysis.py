@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import unittest
@@ -13,6 +14,7 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 
 import DTW  # noqa: E402
 import main as analysis  # noqa: E402
+import motion_data  # noqa: E402
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -59,6 +61,87 @@ class AnalysisUnitTests(unittest.TestCase):
         bodies = analysis.getBodiesFromFile(str(sample))
         self.assertEqual(len(bodies), 4)
         self.assertEqual(len(bodies[0]["joints"]), 32)
+
+
+class MotionDataTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = PROJECT_ROOT / ".test-motion-data" / self._testMethodName
+        self.temporary.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.temporary, ignore_errors=True)
+
+    def test_versioned_public_sample_is_preferred_and_valid(self):
+        folder = PROJECT_ROOT / "data" / "samples" / "tutor_session"
+        frames = motion_data.load_session_frames(folder)
+        bodies = motion_data.load_session_bodies(folder)
+        self.assertEqual(len(frames), 4)
+        self.assertEqual(len(bodies), 4)
+        self.assertEqual(frames[0]["frame_index"], 0)
+        self.assertEqual(len(bodies[0]["joints"]), 32)
+
+    def test_session_loader_falls_back_to_legacy_text(self):
+        source = PROJECT_ROOT / "data" / "samples" / "tutor_session" / "output2.txt"
+        shutil.copyfile(source, self.temporary / "output2.txt")
+        frames = motion_data.load_session_frames(self.temporary)
+        self.assertEqual(len(frames), 4)
+        self.assertEqual(frames[0]["bodies"][0]["body_id"], 1)
+
+    def test_legacy_parser_preserves_orientation_confidence_and_frame_boundary(self):
+        contents = """Frame Index: 7; Timestamp (usec): 12345
+Body ID: 42
+Joint[0]: Position[mm] ( 1, 2, 3 ); Orientation ( 1, 0, 0, 0); Confidence Level (2)
+Body ID: 99
+Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidence Level (1)
+"""
+        path = self.temporary / "output2.txt"
+        path.write_text(contents, encoding="utf-8")
+        frames = motion_data.load_legacy_frames(path)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0]["frame_index"], 7)
+        self.assertEqual(frames[0]["timestamp_usec"], 12345)
+        self.assertEqual(len(frames[0]["bodies"]), 2)
+        joint = frames[0]["bodies"][0]["joints"][0]
+        self.assertEqual(joint["orientation_wxyz"], [1.0, 0.0, 0.0, 0.0])
+        self.assertEqual(joint["confidence_level"], 2)
+
+    def test_round_trip_and_stable_primary_body_selection(self):
+        joint = {
+            "joint_index": 0,
+            "position_mm": [1.0, 2.0, 3.0],
+            "orientation_wxyz": [1.0, 0.0, 0.0, 0.0],
+            "confidence_level": 2,
+        }
+        frames = [
+            {
+                "frame_index": 0,
+                "timestamp_usec": 100,
+                "image": "image_idx_0.jpg",
+                "bodies": [
+                    {"body_id": 10, "joints": [joint]},
+                    {"body_id": 20, "joints": [joint]},
+                ],
+            },
+            {
+                "frame_index": 1,
+                "timestamp_usec": 200,
+                "image": "image_idx_1.jpg",
+                "bodies": [{"body_id": 20, "joints": [joint]}],
+            },
+        ]
+        motion_data.write_session(self.temporary, frames)
+        loaded = motion_data.load_session_frames(self.temporary)
+        selected = motion_data.load_session_bodies(self.temporary)
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual([body["body_id"] for body in selected], [20, 20])
+        self.assertEqual(selected[1]["timestamp_usec"], 200)
+
+    def test_unsupported_schema_version_is_rejected(self):
+        manifest = motion_data.create_manifest()
+        manifest["schema_version"] = 999
+        (self.temporary / "session.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaises(motion_data.MotionDataError):
+            motion_data.load_manifest(self.temporary)
 
 
 class AnalysisIntegrationTests(unittest.TestCase):

@@ -3,6 +3,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 import os
 
+from motion_data import load_session_bodies
+
 
 def save3D(folder):
     # Define connection relationships
@@ -57,26 +59,7 @@ def save3D(folder):
 
 
 
-    # Parse the file and store body data
-    with open(os.path.join(folder,'output2.txt'), 'r') as file:
-        lines = file.readlines()
-
-    bodies = []
-    current_body = {}
-    for line in lines:
-        if line.startswith("Body ID:"):
-            if current_body:
-                bodies.append(current_body)
-                current_body = {}
-            current_body['id'] = int(line.split(":")[1].strip())
-            current_body['joints'] = []
-        elif line.startswith("Joint"):
-            parts = line.split(":")
-            joint_index = int(parts[0].split("[")[1].strip("]"))
-            position = [float(coord.strip()) for coord in parts[1].split("(")[1].split(")")[0].split(",")]
-            current_body['joints'].append({'index': joint_index, 'position': position})
-
-    bodies.append(current_body)  # Add the last body
+    bodies = load_session_bodies(folder)
 
     # Create the animation
     animation = FuncAnimation(fig, update, frames=len(bodies), interval=150)

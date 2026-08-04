@@ -4,6 +4,39 @@ import numpy as np
 
 frame_duration = 150  # Duration in milliseconds to display each frame
 
+
+def resolve_session_image(folder_path, image_name, frame_index):
+    candidates = []
+    if image_name:
+        candidates.append(image_name)
+    candidates.extend((f"image_idx_{frame_index}.jpg", f"imamge_idx_{frame_index}.jpg"))
+    for candidate in candidates:
+        path = os.path.join(folder_path, candidate)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _session_image_files(folder_path, image_names=None):
+    if image_names is not None:
+        return [
+            resolve_session_image(folder_path, name, index)
+            for index, name in enumerate(image_names)
+        ]
+    corrected = [
+        file for file in os.listdir(folder_path)
+        if file.startswith("image_idx_") and file.endswith((".jpg", ".png"))
+    ]
+    legacy = [
+        file for file in os.listdir(folder_path)
+        if file.startswith("imamge_idx_") and file.endswith((".jpg", ".png"))
+    ]
+    selected = corrected or legacy
+    return [
+        os.path.join(folder_path, file)
+        for file in sorted(selected, key=lambda item: int(item.split("idx_")[1].split(".")[0]))
+    ]
+
 value = 10000  # 阈值
 
 def onMouse(event, x, y, flags, param):
@@ -12,7 +45,8 @@ def onMouse(event, x, y, flags, param):
             print("Left mouse button clicked")
 
 
-def view_imageseries(path,elementdistance, folder1_path, folder2_path, folder1_path_3d, plot_path):
+def view_imageseries(path, elementdistance, folder1_path, folder2_path, folder1_path_3d,
+                     plot_path, folder1_image_names=None, folder2_image_names=None):
 
 # mkdir for saving the analyse outcome
     save_folder = f'{folder1_path}\\analyse'
@@ -20,15 +54,8 @@ def view_imageseries(path,elementdistance, folder1_path, folder2_path, folder1_p
         os.mkdir(save_folder)
 
 
-    folder1_image_files = sorted([
-        file for file in os.listdir(folder1_path)
-        if file.endswith((".jpg", ".png"))
-    ], key=lambda x: int(x.split("idx_")[1].split(".")[0]))
-
-    folder2_image_files = sorted([
-        file for file in os.listdir(folder2_path)
-        if file.endswith((".jpg", ".png"))
-    ], key=lambda x: int(x.split("idx_")[1].split(".")[0]))
+    folder1_image_files = _session_image_files(folder1_path, folder1_image_names)
+    folder2_image_files = _session_image_files(folder2_path, folder2_image_names)
 
     folder13D_image_files = sorted([
         file for file in os.listdir(folder1_path_3d)
@@ -50,13 +77,15 @@ def view_imageseries(path,elementdistance, folder1_path, folder2_path, folder1_p
 
         # Load image from folder1 if available
         if 0 <= a < len(folder1_image_files):
-            folder1_image_path = os.path.join(folder1_path, folder1_image_files[a])
-            folder1_image = cv2.imread(folder1_image_path)
+            folder1_image_path = folder1_image_files[a]
+            if folder1_image_path:
+                folder1_image = cv2.imread(folder1_image_path)
 
         # Load image from folder2 if available
         if 0 <= b < len(folder2_image_files):
-            folder2_image_path = os.path.join(folder2_path, folder2_image_files[b])
-            folder2_image = cv2.imread(folder2_image_path)
+            folder2_image_path = folder2_image_files[b]
+            if folder2_image_path:
+                folder2_image = cv2.imread(folder2_image_path)
 
 
         # Load image from folder13D if available

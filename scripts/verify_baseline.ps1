@@ -19,18 +19,26 @@ try {
         throw "config/app.json does not define the recording directories."
     }
     if (-not (Test-Path "data\samples\tutor_session\output2.txt") -or
-        -not (Test-Path "data\samples\customer_session\output2.txt")) {
+        -not (Test-Path "data\samples\customer_session\output2.txt") -or
+        -not (Test-Path "data\samples\tutor_session\session.json") -or
+        -not (Test-Path "data\samples\tutor_session\frames.jsonl") -or
+        -not (Test-Path "data\samples\customer_session\session.json") -or
+        -not (Test-Path "data\samples\customer_session\frames.jsonl")) {
         throw "Public offline sample sessions are missing."
     }
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\motion-session-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\motion-frame-v1.schema.json" | ConvertFrom-Json
 
     Write-Host "Compiling Python sources..."
     Invoke-Checked {
         & $PythonCommand -m py_compile `
             "test_exe\main.py" `
+            "test_exe\motion_data.py" `
             "test_exe\DTW.py" `
             "test_exe\view_image.py" `
             "test_exe\save3D.py" `
-            "show_videos\showvideo.py"
+            "show_videos\showvideo.py" `
+            "scripts\migrate_motion_data.py"
     } "Python source compilation failed."
 
     Write-Host "Running offline analysis tests..."

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/motion-session-v1.schema.json",
+  "title": "TrainerCam motion session manifest",
+  "type": "object",
+  "required": ["format", "schema_version", "source", "coordinate_system", "skeleton", "files"],
+  "properties": {
+    "format": { "const": "trainercam.motion-session" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "type": "string" } }
+    },
+    "coordinate_system": {
+      "type": "object",
+      "required": ["unit", "x_axis", "y_axis", "z_axis", "orientation_order"]
+    },
+    "skeleton": {
+      "type": "object",
+      "required": ["model", "joint_count"]
+    },
+    "files": {
+      "type": "object",
+      "required": ["frames"],
+      "properties": { "frames": { "type": "string" } }
+    }
+  }
+}

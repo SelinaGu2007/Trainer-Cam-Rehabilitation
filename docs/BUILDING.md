@@ -81,6 +81,8 @@ The recorder now requires an output directory as its first argument and creates 
 .\simple_3d_viewer\build\bin\Release\simple_3d_viewer.exe ".\data\runtime\tutor\arm_raise"
 ```
 
+Each recording writes the versioned `session.json` and `frames.jsonl` files as well as the transitional `output2.txt` export. See `docs/MOTION_DATA_FORMAT.md` for the schema and legacy migration command.
+
 ## Vendored Azure Kinect sample helpers
 
 The helper source used by the recorder is committed under `sample_helper_includes` and `sample_helper_libs`. It was restored from Microsoft's official Azure Kinect Samples repository at the commit recorded in `third_party/Azure-Kinect-Samples.PROVENANCE.md` and remains under the upstream MIT License.

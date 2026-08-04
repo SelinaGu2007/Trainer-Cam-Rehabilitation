@@ -5,7 +5,9 @@ import DTW as DTW
 import argparse
 import sys
 import os
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
+
+from motion_data import load_legacy_frames, load_session_bodies
 
 try:
     import cv2
@@ -226,44 +228,10 @@ def getMostFeatures(BodiesAngles_From, BodiesAngles_TO, id_from, id_to):
 
 def getBodiesFromFile(filename: str, n_joints: int = 32):
     """
-    Parse 'output2.txt' produced by simple_3d_viewer.
-
-    Robustness improvement:
-    - joints are stored in a fixed-length list indexed by joint index
-      so getPosition(..., idx) always works even if the file order changes.
+    Backward-compatible legacy loader. New code should call load_session_bodies().
     """
-    with open(filename, 'r', encoding='utf-8', errors='ignore') as file:
-        lines = file.readlines()
-
-    bodies: List[Dict[str, Any]] = []
-    current_body: Optional[Dict[str, Any]] = None
-    joints: Optional[List[Dict[str, Any]]] = None
-
-    for line in lines:
-        line = line.strip()
-        if line.startswith("Body ID:"):
-            # flush previous
-            if current_body is not None:
-                current_body['joints'] = joints if joints is not None else [{'index': i, 'position': [0.0, 0.0, 0.0]} for i in range(n_joints)]
-                bodies.append(current_body)
-            current_body = {'id': int(line.split(":")[1].strip())}
-            joints = [{'index': i, 'position': [0.0, 0.0, 0.0]} for i in range(n_joints)]
-        elif line.startswith("Joint") and joints is not None:
-            try:
-                parts = line.split(":")
-                joint_index = int(parts[0].split("[")[1].strip("]"))
-                pos_str = parts[1].split("(")[1].split(")")[0]
-                position = [float(coord.strip()) for coord in pos_str.split(",")]
-                if 0 <= joint_index < n_joints:
-                    joints[joint_index] = {'index': joint_index, 'position': position}
-            except Exception:
-                # Skip malformed joint line
-                continue
-
-    if current_body is not None:
-        current_body['joints'] = joints if joints is not None else [{'index': i, 'position': [0.0, 0.0, 0.0]} for i in range(n_joints)]
-        bodies.append(current_body)
-    return bodies
+    frames = load_legacy_frames(filename, joint_count=n_joints)
+    return [body for frame in frames for body in frame["bodies"]]
 
 
 def getScore(element_distance, good=30.0, bad=120.0):
@@ -326,13 +294,6 @@ def main():
     if folder_tutor == "NULL" or folder_customer == "NULL":
         raise ValueError("Please provide --folder_tutor and --folder_customer")
 
-    output_tutor = os.path.join(folder_tutor, "output2.txt")
-    output_customer = os.path.join(folder_customer, "output2.txt")
-    if not os.path.exists(output_tutor):
-        raise FileNotFoundError(output_tutor)
-    if not os.path.exists(output_customer):
-        raise FileNotFoundError(output_customer)
-
     analyse_folder = os.path.join(folder_customer, "analyse")
     if function == "showVideos" and os.path.exists(analyse_folder) and os.listdir(analyse_folder):
         # If analysis already exists, just show it
@@ -340,8 +301,8 @@ def main():
         showvideo(analyse_folder)
         return 0
 
-    bodies_A = getBodiesFromFile(output_tutor)
-    bodies_B = getBodiesFromFile(output_customer)
+    bodies_A = load_session_bodies(folder_tutor)
+    bodies_B = load_session_bodies(folder_customer)
     if not bodies_A or not bodies_B:
         raise ValueError("Both recordings must contain at least one valid body frame")
     LOGGER.info("Loaded frames tutor=%d customer=%d", len(bodies_A), len(bodies_B))
@@ -387,14 +348,27 @@ def main():
             folder1_path=folder_customer,
             folder2_path=folder_tutor,
             folder1_path_3d=os.path.join(folder_customer, "3D"),
-            plot_path=plot_folder
+            plot_path=plot_folder,
+            folder1_image_names=[body.get("image") for body in bodies_B],
+            folder2_image_names=[body.get("image") for body in bodies_A],
         )
 
     elif function == "showMaxDiffetence":
-        from view_image import showImage
+        from view_image import resolve_session_image, showImage
+        customer_index, tutor_index = min_paths[max_Index]
+        customer_image = resolve_session_image(
+            folder_customer, bodies_B[customer_index].get("image"),
+            bodies_B[customer_index].get("frame_index", customer_index)
+        )
+        tutor_image = resolve_session_image(
+            folder_tutor, bodies_A[tutor_index].get("image"),
+            bodies_A[tutor_index].get("frame_index", tutor_index)
+        )
+        if customer_image is None or tutor_image is None:
+            raise FileNotFoundError("Comparison frame image is missing")
         showImage(
-            os.path.join(folder_customer, f"imamge_idx_{min_paths[max_Index][0]}.jpg"),
-            os.path.join(folder_tutor, f"imamge_idx_{min_paths[max_Index][1]}.jpg"),
+            customer_image,
+            tutor_image,
         )
     else:
         raise ValueError("Unknown --function. Use: score, showVideos, showMaxDiffetence")

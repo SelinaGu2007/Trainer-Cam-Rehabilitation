@@ -33,6 +33,7 @@ Makefile*
 # ===== Python =====
 __pycache__/
 *.pyc
+.test-motion-data/
 .venv/
 venv/
 env/

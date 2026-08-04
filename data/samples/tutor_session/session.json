@@ -1,0 +1,24 @@
+{
+  "format": "trainercam.motion-session",
+  "schema_version": 1,
+  "created_at": "2026-08-04T11:20:43.462458Z",
+  "source": {
+    "type": "legacy-output2"
+  },
+  "coordinate_system": {
+    "unit": "millimeter",
+    "x_axis": "sensor-right",
+    "y_axis": "sensor-down",
+    "z_axis": "sensor-forward",
+    "orientation_order": "wxyz"
+  },
+  "skeleton": {
+    "model": "azure-kinect-body-tracking",
+    "joint_count": 32
+  },
+  "files": {
+    "frames": "frames.jsonl",
+    "image_pattern": "image_idx_{frame_index}.jpg",
+    "legacy_frames": "output2.txt"
+  }
+}

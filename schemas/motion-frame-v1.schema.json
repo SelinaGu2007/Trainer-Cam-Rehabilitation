@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/motion-frame-v1.schema.json",
+  "title": "TrainerCam motion frame",
+  "type": "object",
+  "required": ["frame_index", "timestamp_usec", "image", "bodies"],
+  "properties": {
+    "frame_index": { "type": "integer", "minimum": 0 },
+    "timestamp_usec": { "type": ["integer", "null"], "minimum": 0 },
+    "image": { "type": ["string", "null"] },
+    "bodies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["body_id", "joints"],
+        "properties": {
+          "body_id": { "type": "integer", "minimum": 0 },
+          "joints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["joint_index", "position_mm", "orientation_wxyz", "confidence_level"],
+              "properties": {
+                "joint_index": { "type": "integer", "minimum": 0 },
+                "position_mm": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": { "type": "number" }
+                },
+                "orientation_wxyz": {
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "items": { "type": "number" }
+                },
+                "confidence_level": { "type": "integer", "minimum": 0, "maximum": 3 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

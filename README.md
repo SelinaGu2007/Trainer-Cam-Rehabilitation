@@ -58,10 +58,13 @@ Records a body-tracking session to a folder supplied as a command-line argument.
 
 Generated files include:
 
-- `output2.txt`: per-frame coordinates for 32 body joints
-- `imamge_idx_<frame>.jpg`: RGB frames captured during the session
+- `session.json`: versioned session metadata and coordinate conventions
+- `frames.jsonl`: timestamped frames containing all bodies, joint poses and confidence
+- `output2.txt`: transitional legacy skeleton export
+- `image_idx_<frame>.jpg`: RGB frames captured during the session
+- `imamge_idx_<frame>.jpg`: temporary compatibility alias for older visualization code
 
-> The `imamge` spelling is retained because it is used by the current recording and analysis pipeline.
+The complete format and migration policy are documented in [docs/MOTION_DATA_FORMAT.md](docs/MOTION_DATA_FORMAT.md).
 
 ### `TutorClient/`
 
@@ -97,7 +100,7 @@ test_exe/main.py
 
 It:
 
-1. loads tutor and customer skeleton data from `output2.txt`;
+1. loads tutor and customer motion-session v1 data, with `output2.txt` fallback;
 2. computes joint-angle features;
 3. applies Gaussian smoothing;
 4. aligns the motion sequences using a DTW warping path;
@@ -127,10 +130,12 @@ Each tutor or customer recording folder should contain:
 
 ```text
 session_folder/
+├── session.json
+├── frames.jsonl
 ├── output2.txt
-├── imamge_idx_0.jpg
-├── imamge_idx_1.jpg
-├── imamge_idx_2.jpg
+├── image_idx_0.jpg
+├── image_idx_1.jpg
+├── image_idx_2.jpg
 └── ...
 ```
 

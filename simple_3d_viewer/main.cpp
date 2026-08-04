@@ -32,6 +32,17 @@ std::tm ToLocalTime(std::time_t value)
     return localTime;
 }
 
+std::tm ToUtcTime(std::time_t value)
+{
+    std::tm utcTime{};
+#ifdef _WIN32
+    gmtime_s(&utcTime, &value);
+#else
+    gmtime_r(&value, &utcTime);
+#endif
+    return utcTime;
+}
+
 
 void PrintUsage()
 {
@@ -205,7 +216,30 @@ void print_body_information(k4abt_body_t body, std::ofstream& outputFile)
     }
 }
 
-void save_color_image( k4a_capture_t capture ,int idx, const std::string& folderPath) {
+void write_body_json(k4abt_body_t body, std::ofstream& motionFramesFile)
+{
+    motionFramesFile << "{\"body_id\":" << body.id << ",\"joints\":[";
+    for (int i = 0; i < static_cast<int>(K4ABT_JOINT_COUNT); ++i)
+    {
+        if (i > 0)
+        {
+            motionFramesFile << ',';
+        }
+        const k4abt_joint_t& joint = body.skeleton.joints[i];
+        motionFramesFile << "{\"joint_index\":" << i
+            << ",\"position_mm\":[" << joint.position.v[0] << ',' << joint.position.v[1] << ',' << joint.position.v[2] << ']'
+            << ",\"orientation_wxyz\":[" << joint.orientation.v[0] << ',' << joint.orientation.v[1] << ','
+            << joint.orientation.v[2] << ',' << joint.orientation.v[3] << ']'
+            << ",\"confidence_level\":" << static_cast<int>(joint.confidence_level) << '}';
+    }
+    motionFramesFile << "]}";
+}
+
+bool save_color_image(k4a_capture_t capture, int idx, const std::string& folderPath) {
+    if (capture == nullptr)
+    {
+        return false;
+    }
     k4a_image_t color_image = k4a_capture_get_color_image(capture);
 
     if (color_image != NULL) {
@@ -216,12 +250,13 @@ void save_color_image( k4a_capture_t capture ,int idx, const std::string& folder
         // Save frame image with both legacy (typo) and corrected filename for backward compatibility
         const std::string legacy_path = folderPath + "\\imamge_idx_" + std::to_string(idx) + ".jpg";
         const std::string fixed_path  = folderPath + "\\image_idx_"  + std::to_string(idx) + ".jpg";
-        cv::imwrite(legacy_path, colorMat);
-        cv::imwrite(fixed_path,  colorMat);
+        const bool legacySaved = cv::imwrite(legacy_path, colorMat);
+        const bool fixedSaved = cv::imwrite(fixed_path, colorMat);
 
         k4a_image_release(color_image);
+        return legacySaved && fixedSaved;
     }
-
+    return false;
 }
 
 
@@ -231,7 +266,8 @@ void save_color_image( k4a_capture_t capture ,int idx, const std::string& folder
 
 
 
-void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int depthWidth, int depthHeight, std::ofstream& outputFile, k4a_capture_t capture, int idx, const std::string& folderPath) {
+void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int depthWidth, int depthHeight,
+    std::ofstream& outputFile, std::ofstream& motionFramesFile, int idx, const std::string& folderPath) {
 
     // Obtain original capture that generates the body tracking result
     k4a_capture_t originalCapture = k4abt_frame_get_capture(bodyFrame);
@@ -258,7 +294,24 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
     // Visualize point cloud
     window3d.UpdatePointClouds(depthImage, pointCloudColors);
 
-    // Visualize the skeleton data
+    const uint64_t timestampUsec = k4abt_frame_get_device_timestamp_usec(bodyFrame);
+    const bool imageSaved = save_color_image(originalCapture, idx, folderPath);
+    outputFile << "Frame Index: " << idx << "; Timestamp (usec): " << timestampUsec << std::endl;
+    motionFramesFile << std::setprecision(9)
+        << "{\"frame_index\":" << idx
+        << ",\"timestamp_usec\":" << timestampUsec
+        << ",\"image\":";
+    if (imageSaved)
+    {
+        motionFramesFile << "\"image_idx_" << idx << ".jpg\"";
+    }
+    else
+    {
+        motionFramesFile << "null";
+    }
+    motionFramesFile << ",\"bodies\":[";
+
+    // Visualize and write the skeleton data
     window3d.CleanJointsAndBones();
     uint32_t numBodies = k4abt_frame_get_num_bodies(bodyFrame);
     for (uint32_t i = 0; i < numBodies; i++)
@@ -269,9 +322,12 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
 
 
         body.id = k4abt_frame_get_body_id(bodyFrame, i);
-        k4a_image_t colorImage = k4abt_frame_get_body_index_map(bodyFrame);
         print_body_information(body, outputFile);
-        save_color_image(capture, idx, folderPath);
+        if (i > 0)
+        {
+            motionFramesFile << ',';
+        }
+        write_body_json(body, motionFramesFile);
 
         // Assign the correct color based on the body id
         Color color = g_bodyColors[body.id % g_bodyColors.size()];
@@ -312,13 +368,15 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
             }
         }
     }
+    motionFramesFile << "]}" << std::endl;
 
     k4a_capture_release(originalCapture);
     k4a_image_release(depthImage);
 
 }
 
-void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, const std::string& Imagefile)
+void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, std::ofstream& motionFramesFile,
+    const std::string& Imagefile)
 {
     // Initialize the 3d window controller
     Window3dWrapper window3d;
@@ -356,6 +414,7 @@ void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, const std:
     window3d.SetCloseCallback(CloseCallback);
     window3d.SetKeyCallback(ProcessKey);
 
+    int idx = 0;
     while (playbackResult == K4A_STREAM_RESULT_SUCCEEDED && s_isRunning)
     {
         playbackResult = k4a_playback_get_next_capture(playbackHandle, &capture);
@@ -380,9 +439,8 @@ void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, const std:
 
             //enque capture and pop results - synchronous
             k4a_wait_result_t queueCaptureResult = k4abt_tracker_enqueue_capture(tracker, capture, K4A_WAIT_INFINITE);
-
-            // Release the sensor capture once it is no longer needed.
-            //k4a_capture_release(capture);
+            k4a_capture_release(capture);
+            capture = nullptr;
 
             if (queueCaptureResult == K4A_WAIT_RESULT_FAILED)
             {
@@ -395,10 +453,10 @@ void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, const std:
             if (popFrameResult == K4A_WAIT_RESULT_SUCCEEDED)
             {
                 /************* Successfully get a body tracking result, process the result here ***************/
-                VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile,capture,0,Imagefile);
+                VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile, motionFramesFile, idx, Imagefile);
+                ++idx;
                 //Release the bodyFrame
                 k4abt_frame_release(bodyFrame);
-                k4a_capture_release(capture);
             }
             else
             {
@@ -419,7 +477,8 @@ void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, const std:
     k4a_playback_close(playbackHandle);
 }
 
-void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, const std::string& Imagefile)
+void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, std::ofstream& motionFramesFile,
+    const std::string& Imagefile)
 {
     k4a_device_t device = nullptr;
     VERIFY(k4a_device_open(0, &device), "Open K4A Device failed!");
@@ -463,9 +522,8 @@ void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, cons
             // timeout_in_ms is set to 0. Return immediately no matter whether the sensorCapture is successfully added
             // to the queue or not.
             k4a_wait_result_t queueCaptureResult = k4abt_tracker_enqueue_capture(tracker, sensorCapture, 0);
-
-            // Release the sensor capture once it is no longer needed.
-           // k4a_capture_release(sensorCapture);
+            k4a_capture_release(sensorCapture);
+            sensorCapture = nullptr;
 
             if (queueCaptureResult == K4A_WAIT_RESULT_FAILED)
             {
@@ -485,12 +543,10 @@ void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, cons
         if (popFrameResult == K4A_WAIT_RESULT_SUCCEEDED)
         {
             /************* Successfully get a body tracking result, process the result here ***************/
-            VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile,sensorCapture,idx,Imagefile);
-            //save_color_image(sensorCapture,idx);
+            VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile, motionFramesFile, idx, Imagefile);
             idx++;
             //Release the bodyFrame
             k4abt_frame_release(bodyFrame);
-            k4a_capture_release(sensorCapture);
         }
         
 
@@ -535,6 +591,13 @@ int main(int argc, char** argv)
         return 4;
     }
 
+    std::ofstream motionFramesFile(basePath + "\\frames.jsonl");
+    if (!motionFramesFile.is_open())
+    {
+        std::cerr << "Unable to open versioned motion frame file in: " << basePath << std::endl;
+        return 5;
+    }
+
     std::ofstream sessionLog(basePath+"\\session.log", std::ios::app);
     const auto startedAt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     const std::tm startedLocalTime = ToLocalTime(startedAt);
@@ -551,16 +614,38 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    std::ofstream manifestFile(basePath + "\\session.json");
+    if (!manifestFile.is_open())
+    {
+        std::cerr << "Unable to open motion session manifest in: " << basePath << std::endl;
+        return 6;
+    }
+    const std::tm startedUtcTime = ToUtcTime(startedAt);
+    manifestFile << "{\n"
+        << "  \"format\": \"trainercam.motion-session\",\n"
+        << "  \"schema_version\": 1,\n"
+        << "  \"created_at\": \"" << std::put_time(&startedUtcTime, "%Y-%m-%dT%H:%M:%SZ") << "\",\n"
+        << "  \"source\": { \"type\": \"azure-kinect\", \"mode\": \""
+        << (inputSettings.Offline ? "recording" : "live") << "\" },\n"
+        << "  \"coordinate_system\": { \"unit\": \"millimeter\", \"x_axis\": \"sensor-right\", "
+        << "\"y_axis\": \"sensor-down\", \"z_axis\": \"sensor-forward\", \"orientation_order\": \"wxyz\" },\n"
+        << "  \"skeleton\": { \"model\": \"azure-kinect-body-tracking\", \"joint_count\": 32 },\n"
+        << "  \"files\": { \"frames\": \"frames.jsonl\", \"image_pattern\": \"image_idx_{frame_index}.jpg\", "
+        << "\"legacy_frames\": \"output2.txt\" }\n"
+        << "}\n";
+    manifestFile.close();
+
     // Either play the offline file or play from the device
     if (inputSettings.Offline == true)
     {
-        PlayFile(inputSettings, outputFile, ImagefileFloder);
+        PlayFile(inputSettings, outputFile, motionFramesFile, ImagefileFloder);
     }
     else
     {
-        PlayFromDevice(inputSettings, outputFile, ImagefileFloder);
+        PlayFromDevice(inputSettings, outputFile, motionFramesFile, ImagefileFloder);
     }
     outputFile.close();
+    motionFramesFile.close();
     const auto finishedAt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     const std::tm finishedLocalTime = ToLocalTime(finishedAt);
     sessionLog << std::put_time(&finishedLocalTime, "%Y-%m-%dT%H:%M:%S")
