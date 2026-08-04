@@ -41,10 +41,12 @@ The motion-comparison pipeline consists of the following steps:
 
 1. Capture RGB frames and 3D body-joint coordinates using Azure Kinect Body Tracking.
 2. Extract angle-based motion features from selected body joints.
-3. Smooth motion trajectories using a Gaussian filter.
-4. Align tutor and user sequences with Dynamic Time Warping.
-5. Compute distances between aligned frames.
-6. Produce either an aggregate motion score or frame-level comparison visualizations.
+3. Repair short low-confidence gaps and reject unusable frames.
+4. Normalize the skeleton by body origin, scale, and torso orientation.
+5. Smooth motion trajectories using a Gaussian filter.
+6. Align tutor and user sequences with Dynamic Time Warping.
+7. Compute distances between aligned frames.
+8. Produce either a quality report, aggregate score, or frame-level visualization.
 
 Dynamic Time Warping allows exercises performed at different speeds to be compared by aligning corresponding stages of the motion.
 
@@ -109,6 +111,7 @@ It:
 
 Supported modes:
 
+- `--function quality`: reports joint coverage, interpolation and usable frames;
 - `--function score`: prints an aggregate motion-comparison score;
 - `--function showVideos`: generates frame-level analysis images.
 
@@ -182,6 +185,8 @@ The generated visualization frames are saved under:
 ```text
 <customer_folder>/analyse/
 ```
+
+The confidence handling, missing-joint repair, body normalisation and quality gates are documented in [docs/MOTION_PREPROCESSING.md](docs/MOTION_PREPROCESSING.md).
 
 ## Project Contributions
 

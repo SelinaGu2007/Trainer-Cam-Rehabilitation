@@ -161,6 +161,23 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(score, 0.0)
         self.assertLessEqual(score, 100.0)
 
+    def test_public_samples_produce_a_quality_report(self):
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "tutor_session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--function",
+            "quality",
+        ]
+        completed = subprocess.run(command, check=True, capture_output=True, text=True)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["tutor"]["usable_frame_count"], 4)
+        self.assertEqual(report["customer"]["usable_frame_count"], 4)
+        self.assertEqual(report["tutor"]["required_joint_coverage"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

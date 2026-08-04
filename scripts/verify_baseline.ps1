@@ -34,6 +34,7 @@ try {
         & $PythonCommand -m py_compile `
             "test_exe\main.py" `
             "test_exe\motion_data.py" `
+            "test_exe\motion_preprocessing.py" `
             "test_exe\DTW.py" `
             "test_exe\view_image.py" `
             "test_exe\save3D.py" `

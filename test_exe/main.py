@@ -1,4 +1,5 @@
 import math
+import json
 import logging
 import numpy as np
 import DTW as DTW
@@ -8,6 +9,7 @@ import os
 from typing import List, Tuple, Dict, Any
 
 from motion_data import load_legacy_frames, load_session_bodies
+from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
 
 try:
     import cv2
@@ -275,8 +277,14 @@ def getargs(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='two folder', add_help=True)
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
-    parser.add_argument("--function", default='NULL', help='select from showVideos,score,showMaxDiffetence')
+    parser.add_argument("--function", default='NULL', help='select from quality,showVideos,score,showMaxDiffetence')
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
+    parser.add_argument("--min-confidence", type=int, default=1, choices=range(4))
+    parser.add_argument("--max-interpolation-gap", type=int, default=3)
+    parser.add_argument("--min-required-coverage", type=float, default=0.8)
+    parser.add_argument("--min-frame-joint-fraction", type=float, default=1.0)
+    parser.add_argument("--smoothing-sigma", type=float, default=3.0)
+    parser.add_argument("--no-normalize", action="store_true")
     return parser.parse_args(args)
 
 
@@ -293,6 +301,10 @@ def main():
 
     if folder_tutor == "NULL" or folder_customer == "NULL":
         raise ValueError("Please provide --folder_tutor and --folder_customer")
+    if not 0.0 <= args.min_required_coverage <= 1.0:
+        raise ValueError("--min-required-coverage must be between 0 and 1")
+    if not 0.0 < args.min_frame_joint_fraction <= 1.0:
+        raise ValueError("--min-frame-joint-fraction must be in (0, 1]")
 
     analyse_folder = os.path.join(folder_customer, "analyse")
     if function == "showVideos" and os.path.exists(analyse_folder) and os.listdir(analyse_folder):
@@ -301,18 +313,54 @@ def main():
         showvideo(analyse_folder)
         return 0
 
-    bodies_A = load_session_bodies(folder_tutor)
-    bodies_B = load_session_bodies(folder_customer)
-    if not bodies_A or not bodies_B:
+    raw_bodies_A = load_session_bodies(folder_tutor)
+    raw_bodies_B = load_session_bodies(folder_customer)
+    if not raw_bodies_A or not raw_bodies_B:
         raise ValueError("Both recordings must contain at least one valid body frame")
-    LOGGER.info("Loaded frames tutor=%d customer=%d", len(bodies_A), len(bodies_B))
+    required_joints = {joint for segment in features for joint in segment}
+    prepared_A = prepare_motion(
+        raw_bodies_A,
+        min_confidence=args.min_confidence,
+        max_interpolation_gap=args.max_interpolation_gap,
+        normalise=not args.no_normalize,
+    )
+    prepared_B = prepare_motion(
+        raw_bodies_B,
+        min_confidence=args.min_confidence,
+        max_interpolation_gap=args.max_interpolation_gap,
+        normalise=not args.no_normalize,
+    )
+    quality_A = prepared_A.quality_summary(required_joints)
+    quality_B = prepared_B.quality_summary(required_joints)
+    LOGGER.info("Tutor motion quality: %s", quality_A)
+    LOGGER.info("Customer motion quality: %s", quality_B)
+    for role, quality in (("tutor", quality_A), ("customer", quality_B)):
+        if quality["required_joint_coverage"] < args.min_required_coverage:
+            raise ValueError(
+                f"{role} required joint coverage is too low: "
+                f"{quality['required_joint_coverage']:.1%}"
+            )
+    prepared_A = retain_usable_frames(
+        prepared_A, required_joints, minimum_fraction=args.min_frame_joint_fraction
+    )
+    prepared_B = retain_usable_frames(
+        prepared_B, required_joints, minimum_fraction=args.min_frame_joint_fraction
+    )
+    quality_A["usable_frame_count"] = int(prepared_A.positions.shape[0])
+    quality_B["usable_frame_count"] = int(prepared_B.positions.shape[0])
+    if function == "quality":
+        print(json.dumps({"tutor": quality_A, "customer": quality_B}, indent=2))
+        return 0
+    bodies_A = prepared_to_bodies(prepared_A)
+    bodies_B = prepared_to_bodies(prepared_B)
+    LOGGER.info("Prepared frames tutor=%d customer=%d", len(bodies_A), len(bodies_B))
 
     Angle_A = np.array(getAnglesToaxle(bodies_A, features, blind=False), dtype=np.float32)
     Angle_B = np.array(getAnglesToaxle(bodies_B, features, blind=False), dtype=np.float32)
 
     # Smooth to reduce noise before DTW
-    Angle_A = GaussianFilter(Angle_A, sigma=3)
-    Angle_B = GaussianFilter(Angle_B, sigma=3)
+    Angle_A = GaussianFilter(Angle_A, sigma=args.smoothing_sigma)
+    Angle_B = GaussianFilter(Angle_B, sigma=args.smoothing_sigma)
 
     # dtaidistance expects one feature vector per time step. Flatten the
     # (axis, segment) dimensions while retaining the original arrays for plots.
@@ -371,7 +419,7 @@ def main():
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: score, showVideos, showMaxDiffetence")
+        raise ValueError("Unknown --function. Use: quality, score, showVideos, showMaxDiffetence")
 
     return 0
 
