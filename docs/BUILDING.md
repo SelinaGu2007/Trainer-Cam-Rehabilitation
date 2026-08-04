@@ -35,6 +35,8 @@ The score workflow has a NumPy-only DTW and smoothing fallback. OpenCV, Matplotl
 
 Both Qt clients read `config/app.json`. Relative paths are resolved from `project_root`, not from whichever directory happens to launch the executable.
 
+`paths.exercise_profile` selects the default exercise profile passed to the analyzer. Existing local configuration files that omit it fall back to `config/exercises/arm_raise.json`.
+
 Set `TRAINER_CAM_CONFIG` to use another configuration file:
 
 ```powershell

@@ -97,6 +97,10 @@ AppConfig AppConfig::load()
     result.recorderProgram = resolvePath(projectRoot, requiredString(paths, "recorder"));
     result.videoPlayerProgram = resolvePath(projectRoot, requiredString(paths, "video_player"));
     result.analyzerProgram = resolvePath(projectRoot, requiredString(paths, "analyzer"));
+    const QString configuredProfile = paths.value("exercise_profile").toString().trimmed();
+    result.exerciseProfile = resolvePath(
+        projectRoot,
+        configuredProfile.isEmpty() ? "config/exercises/arm_raise.json" : configuredProfile);
 
     const QJsonObject network = rootObject.value("network").toObject();
     result.host = requiredString(network, "host");

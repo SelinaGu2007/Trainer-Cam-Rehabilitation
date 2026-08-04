@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/exercise-profile-v1.schema.json",
+  "title": "TrainerCam exercise profile",
+  "type": "object",
+  "required": ["format", "schema_version", "id", "display_name", "features"],
+  "properties": {
+    "format": { "const": "trainercam.exercise-profile" },
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "display_name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "joints", "axes", "weight", "good_error_deg", "bad_error_deg", "feedback"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "joints": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "integer", "minimum": 0, "maximum": 31 }
+          },
+          "axes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["x", "y", "z"] }
+          },
+          "weight": { "type": "number", "exclusiveMinimum": 0 },
+          "good_error_deg": { "type": "number", "exclusiveMinimum": 0 },
+          "bad_error_deg": { "type": "number", "exclusiveMinimum": 0 },
+          "feedback": { "type": "string" }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "worst_window_frames": { "type": "integer", "minimum": 1 },
+        "outlier_penalty": { "type": "number", "minimum": 0, "maximum": 100 },
+        "feedback_below_score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    }
+  }
+}

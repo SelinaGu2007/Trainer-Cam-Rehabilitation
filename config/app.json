@@ -6,7 +6,8 @@
     "logs": "logs",
     "recorder": "simple_3d_viewer/build/bin/Release/simple_3d_viewer.exe",
     "video_player": "show_videos/dist/showvideo/showvideo.exe",
-    "analyzer": "test_exe/dist/main/main.exe"
+    "analyzer": "test_exe/dist/main/main.exe",
+    "exercise_profile": "config/exercises/arm_raise.json"
   },
   "network": {
     "host": "127.0.0.1",

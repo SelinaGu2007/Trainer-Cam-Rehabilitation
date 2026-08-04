@@ -12,6 +12,7 @@ MainWindow::MainWindow(QWidget *parent)
     TutorFolder = config.tutorRecordingsDir;
     VideoPlayerProgram = config.videoPlayerProgram;
     AnalyzerProgram = config.analyzerProgram;
+    ExerciseProfile = config.exerciseProfile;
     ServerPort = config.port;
     server = new ServerStuff(this);
     connect(server, &ServerStuff::gotNewMesssage,
@@ -110,7 +111,11 @@ void MainWindow::on_pushButtonAnalyse_clicked()
 
     QString program = AnalyzerProgram;
     QStringList arguments;
-    arguments << "--folder_tutor" << dir1 << "--folder_customer" << dir2 << "--function" << "showVideos";
+    arguments << "--folder_tutor" << dir1
+              << "--folder_customer" << dir2
+              << "--profile" << ExerciseProfile
+              << "--report-output" << QDir(folder_customer).filePath("assessment.json")
+              << "--function" << "showVideos";
 
 
 

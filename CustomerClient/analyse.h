@@ -32,6 +32,7 @@ private:
     QString TutorFolder;
     QString MyRecordingFolder;
     QString AnalyzerProgram;
+    QString ExerciseProfile;
 
 protected:
     void showEvent(QShowEvent *event) override;

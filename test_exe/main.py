@@ -6,8 +6,11 @@ import DTW as DTW
 import argparse
 import sys
 import os
+from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
+from assessment import create_assessment_report, score_errors, weighted_sequence
+from exercise_profile import load_profile
 from motion_data import load_legacy_frames, load_session_bodies
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
 
@@ -17,16 +20,6 @@ except ImportError:
     cv2 = None
 
 LOGGER = logging.getLogger("trainer_cam.analysis")
-
-# Pairs of joint indices used as "features" (each pair defines a skeleton segment)
-features: List[Tuple[int, int]] = [
-    (5, 6), (6, 7),
-    (12, 13), (13, 14),
-    (18, 19), (19, 20),
-    (22, 23), (23, 24),
-    (5, 12),
-]
-
 
 def getVector(B, A):
     """
@@ -237,39 +230,14 @@ def getBodiesFromFile(filename: str, n_joints: int = 32):
 
 
 def getScore(element_distance, good=30.0, bad=120.0):
-    """
-    Stable 0-100 score from element-wise DTW distances.
-
-    - element_distance: list/array of nonnegative distances
-    - good: typical RMS distance for a good match (score ~ 90-100)
-    - bad: RMS distance for a poor match (score ~ 0-20)
-
-    Returns: float in [0, 100]
-    """
+    """Backward-compatible wrapper for callers that pass squared distances."""
     if element_distance is None or len(element_distance) == 0:
         return 0.0
-
     d = np.asarray(element_distance, dtype=np.float32)
     d = d[np.isfinite(d)]
     if d.size == 0:
         return 0.0
-
-    rms = float(np.sqrt(np.mean(d)))
-
-    # Outlier penalty: fraction of frames above "bad" threshold
-    out_frac = float(np.mean(np.sqrt(d) > bad))
-
-    # Map rms into [0,1] then to [0,100]
-    # Clamp for stability
-    t = (rms - good) / max(bad - good, 1e-6)
-    t = min(max(t, 0.0), 1.0)
-
-    score = 100.0 * (1.0 - t)
-
-    # Apply mild outlier penalty (max -15 points)
-    score -= 15.0 * out_frac
-
-    return max(0.0, min(100.0, score))
+    return score_errors(np.sqrt(np.clip(d, 0.0, None)), good, bad, 15.0)
 
 
 
@@ -277,7 +245,9 @@ def getargs(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='two folder', add_help=True)
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
-    parser.add_argument("--function", default='NULL', help='select from quality,showVideos,score,showMaxDiffetence')
+    parser.add_argument("--function", default='NULL', help='select from quality,report,showVideos,score,showMaxDiffetence')
+    parser.add_argument("--profile", default=None, help='exercise profile id or JSON path')
+    parser.add_argument("--report-output", default=None, help='optional assessment JSON output path')
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--min-confidence", type=int, default=1, choices=range(4))
     parser.add_argument("--max-interpolation-gap", type=int, default=3)
@@ -305,9 +275,13 @@ def main():
         raise ValueError("--min-required-coverage must be between 0 and 1")
     if not 0.0 < args.min_frame_joint_fraction <= 1.0:
         raise ValueError("--min-frame-joint-fraction must be in (0, 1]")
+    profile = load_profile(args.profile)
+    LOGGER.info("Using exercise profile id=%s source=%s", profile.profile_id, profile.source_path)
 
     analyse_folder = os.path.join(folder_customer, "analyse")
-    if function == "showVideos" and os.path.exists(analyse_folder) and os.listdir(analyse_folder):
+    cached_report_ready = not args.report_output or Path(args.report_output).is_file()
+    if (function == "showVideos" and os.path.exists(analyse_folder)
+            and os.listdir(analyse_folder) and cached_report_ready):
         # If analysis already exists, just show it
         from view_image import showvideo
         showvideo(analyse_folder)
@@ -317,7 +291,7 @@ def main():
     raw_bodies_B = load_session_bodies(folder_customer)
     if not raw_bodies_A or not raw_bodies_B:
         raise ValueError("Both recordings must contain at least one valid body frame")
-    required_joints = {joint for segment in features for joint in segment}
+    required_joints = profile.required_joints
     prepared_A = prepare_motion(
         raw_bodies_A,
         min_confidence=args.min_confidence,
@@ -355,17 +329,16 @@ def main():
     bodies_B = prepared_to_bodies(prepared_B)
     LOGGER.info("Prepared frames tutor=%d customer=%d", len(bodies_A), len(bodies_B))
 
-    Angle_A = np.array(getAnglesToaxle(bodies_A, features, blind=False), dtype=np.float32)
-    Angle_B = np.array(getAnglesToaxle(bodies_B, features, blind=False), dtype=np.float32)
+    Angle_A = np.array(getAnglesToaxle(bodies_A, profile.feature_pairs, blind=False), dtype=np.float32)
+    Angle_B = np.array(getAnglesToaxle(bodies_B, profile.feature_pairs, blind=False), dtype=np.float32)
 
     # Smooth to reduce noise before DTW
     Angle_A = GaussianFilter(Angle_A, sigma=args.smoothing_sigma)
     Angle_B = GaussianFilter(Angle_B, sigma=args.smoothing_sigma)
 
-    # dtaidistance expects one feature vector per time step. Flatten the
-    # (axis, segment) dimensions while retaining the original arrays for plots.
-    sequence_A = Angle_A.reshape(Angle_A.shape[0], -1)
-    sequence_B = Angle_B.reshape(Angle_B.shape[0], -1)
+    # The exercise profile selects axes and applies feature weights before DTW.
+    sequence_A = weighted_sequence(Angle_A, profile)
+    sequence_B = weighted_sequence(Angle_B, profile)
 
     # Constrain DTW warping to a reasonable band for speed + stability
     paths = DTW.getPath(sequence_B, sequence_A, window=30)
@@ -373,13 +346,28 @@ def main():
     element_distance = DTW.get_elementwise_distances(sequence_B, sequence_A, paths)
     min_paths, min_distance = DTW.getMinPath_Distance(paths, element_distance)
 
-    # Use a short window so we find the worst *segment* (less noisy than a single frame)
-    max_Index, max_Item = DTW.getMaxIndex_Item(min_distance, 10)
+    report = create_assessment_report(
+        customer_angles=Angle_B,
+        tutor_angles=Angle_A,
+        path=paths,
+        profile=profile,
+        customer_motion=prepared_B,
+        tutor_motion=prepared_A,
+        customer_quality=quality_B,
+        tutor_quality=quality_A,
+    )
+    if args.report_output:
+        report_path = Path(args.report_output)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        LOGGER.info("Assessment report written to %s", report_path)
 
 
     if function == 'score':
-        score = getScore(min_distance)
-        print(score)
+        print(report["overall_score"])
+
+    elif function == "report":
+        print(json.dumps(report, indent=2))
 
     elif function == "showVideos":
         from save3D import save3D
@@ -387,8 +375,8 @@ def main():
         plot_folder = os.path.join(folder_customer, "plot")
         if not os.path.exists(plot_folder):
             os.mkdir(plot_folder)
-        # Example plot channel (kept consistent with your original code)
-        DTW.plotWrap(Angle_B[:, 0, 1], Angle_A[:, 0, 1], os.path.join(plot_folder, "wrap.jpg"))
+        # Plot the first configured feature so profiles with any feature count work.
+        DTW.plotWrap(Angle_B[:, 0, 0], Angle_A[:, 0, 0], os.path.join(plot_folder, "wrap.jpg"))
         save3D(folder=folder_customer)
         view_imageseries(
             path=min_paths,
@@ -403,7 +391,8 @@ def main():
 
     elif function == "showMaxDiffetence":
         from view_image import resolve_session_image, showImage
-        customer_index, tutor_index = min_paths[max_Index]
+        customer_index = report["worst_segment"]["customer_sequence_index"]
+        tutor_index = report["worst_segment"]["tutor_sequence_index"]
         customer_image = resolve_session_image(
             folder_customer, bodies_B[customer_index].get("image"),
             bodies_B[customer_index].get("frame_index", customer_index)
@@ -419,7 +408,7 @@ def main():
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: quality, score, showVideos, showMaxDiffetence")
+        raise ValueError("Unknown --function. Use: quality, report, score, showVideos, showMaxDiffetence")
 
     return 0
 

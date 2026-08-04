@@ -2,7 +2,7 @@
 
 TrainerCam is a rehabilitation exercise coaching prototype that records human motion with Azure Kinect, extracts 3D skeleton joints, compares a user's movement with a tutor demonstration, and visualizes motion differences.
 
-> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, and offline DTW scoring and visualization. Persistent subject tracking, real-time corrective feedback, configurable exercise profiles, and voice feedback are planned work rather than completed capabilities.
+> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, confidence-aware preprocessing, configurable offline DTW assessment, and structured scoring reports. Persistent subject tracking, real-time corrective feedback, clinically calibrated profiles, and voice feedback are planned work rather than completed capabilities.
 
 ![Motion analysis visualization](docs/motion_analysis.png)
 
@@ -112,6 +112,7 @@ It:
 Supported modes:
 
 - `--function quality`: reports joint coverage, interpolation and usable frames;
+- `--function report`: prints a structured overall and per-feature assessment;
 - `--function score`: prints an aggregate motion-comparison score;
 - `--function showVideos`: generates frame-level analysis images.
 
@@ -187,6 +188,8 @@ The generated visualization frames are saved under:
 ```
 
 The confidence handling, missing-joint repair, body normalisation and quality gates are documented in [docs/MOTION_PREPROCESSING.md](docs/MOTION_PREPROCESSING.md).
+
+Exercise-specific features, weights, tolerances, feedback, and the assessment report are documented in [docs/SCORING_AND_PROFILES.md](docs/SCORING_AND_PROFILES.md). The default engineering profile is `config/exercises/arm_raise.json`.
 
 ## Project Contributions
 

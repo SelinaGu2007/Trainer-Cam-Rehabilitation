@@ -48,6 +48,7 @@ private:
     QString TutorFolder;
     QString VideoPlayerProgram;
     QString AnalyzerProgram;
+    QString ExerciseProfile;
     quint16 ServerPort = 6547;
 
 protected:

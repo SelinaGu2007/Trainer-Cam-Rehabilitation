@@ -1,0 +1,23 @@
+{
+  "format": "trainercam.exercise-profile",
+  "schema_version": 1,
+  "id": "arm_raise",
+  "display_name": "Arm raise",
+  "description": "Example engineering profile for bilateral arm-raise comparison. Thresholds are not clinically validated.",
+  "features": [
+    { "id": "left_upper_arm", "label": "Left upper arm", "joints": [5, 6], "axes": ["x", "y", "z"], "weight": 1.5, "good_error_deg": 8, "bad_error_deg": 35, "feedback": "Review the direction and range of the left upper arm." },
+    { "id": "left_forearm", "label": "Left forearm", "joints": [6, 7], "axes": ["x", "y", "z"], "weight": 1.5, "good_error_deg": 8, "bad_error_deg": 35, "feedback": "Review the left elbow and wrist path." },
+    { "id": "right_upper_arm", "label": "Right upper arm", "joints": [12, 13], "axes": ["x", "y", "z"], "weight": 1.5, "good_error_deg": 8, "bad_error_deg": 35, "feedback": "Review the direction and range of the right upper arm." },
+    { "id": "right_forearm", "label": "Right forearm", "joints": [13, 14], "axes": ["x", "y", "z"], "weight": 1.5, "good_error_deg": 8, "bad_error_deg": 35, "feedback": "Review the right elbow and wrist path." },
+    { "id": "left_thigh", "label": "Left thigh", "joints": [18, 19], "axes": ["x", "y", "z"], "weight": 0.5, "good_error_deg": 10, "bad_error_deg": 40, "feedback": "Keep the left hip and thigh stable during the arm raise." },
+    { "id": "left_shin", "label": "Left lower leg", "joints": [19, 20], "axes": ["x", "y", "z"], "weight": 0.25, "good_error_deg": 10, "bad_error_deg": 40, "feedback": "Keep the left knee and lower leg stable." },
+    { "id": "right_thigh", "label": "Right thigh", "joints": [22, 23], "axes": ["x", "y", "z"], "weight": 0.5, "good_error_deg": 10, "bad_error_deg": 40, "feedback": "Keep the right hip and thigh stable during the arm raise." },
+    { "id": "right_shin", "label": "Right lower leg", "joints": [23, 24], "axes": ["x", "y", "z"], "weight": 0.25, "good_error_deg": 10, "bad_error_deg": 40, "feedback": "Keep the right knee and lower leg stable." },
+    { "id": "shoulder_line", "label": "Shoulder alignment", "joints": [5, 12], "axes": ["x", "y", "z"], "weight": 1.0, "good_error_deg": 6, "bad_error_deg": 25, "feedback": "Keep both shoulders level and avoid excessive trunk compensation." }
+  ],
+  "scoring": {
+    "worst_window_frames": 10,
+    "outlier_penalty": 15,
+    "feedback_below_score": 80
+  }
+}

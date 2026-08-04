@@ -23,7 +23,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("paths", config)
         self.assertIn("network", config)
         self.assertGreater(config["network"]["port"], 0)
-        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer"):
+        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile"):
             self.assertTrue(config["paths"][key])
 
 
@@ -177,6 +177,37 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(report["tutor"]["usable_frame_count"], 4)
         self.assertEqual(report["customer"]["usable_frame_count"], 4)
         self.assertEqual(report["tutor"]["required_joint_coverage"], 1.0)
+
+    def test_public_samples_produce_an_explainable_assessment_report(self):
+        output_folder = PROJECT_ROOT / ".test-motion-data" / "assessment-integration"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        output_path = output_folder / "assessment.json"
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "tutor_session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--profile",
+            "arm_raise",
+            "--function",
+            "report",
+            "--report-output",
+            str(output_path),
+        ]
+        try:
+            completed = subprocess.run(command, check=True, capture_output=True, text=True)
+            report = json.loads(completed.stdout)
+            saved_report = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["format"], "trainercam.assessment-report")
+            self.assertEqual(report["profile"]["id"], "arm_raise")
+            self.assertEqual(len(report["feature_scores"]), 9)
+            self.assertEqual(saved_report["overall_score"], report["overall_score"])
+            self.assertGreaterEqual(report["overall_score"], 0.0)
+            self.assertLessEqual(report["overall_score"], 100.0)
+        finally:
+            shutil.rmtree(output_folder, ignore_errors=True)
 
 
 if __name__ == "__main__":

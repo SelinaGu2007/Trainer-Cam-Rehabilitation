@@ -14,6 +14,7 @@ struct AppConfig
     QString recorderProgram;
     QString videoPlayerProgram;
     QString analyzerProgram;
+    QString exerciseProfile;
     QString host;
     quint16 port = 6547;
 
