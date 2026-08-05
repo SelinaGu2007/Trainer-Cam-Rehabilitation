@@ -11,6 +11,7 @@ from typing import List, Tuple, Dict, Any
 
 from assessment import create_assessment_report, score_errors, weighted_sequence
 from exercise_profile import load_profile
+from feedback_summary import create_feedback_summary
 from motion_data import load_legacy_frames, load_session_bodies, load_session_track
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
 from realtime_feedback import load_realtime_config, run_realtime_feedback
@@ -254,6 +255,8 @@ def getargs(args=sys.argv[1:]):
     parser.add_argument("--tutor-body-id", type=int, default=None, help='explicit tutor body ID')
     parser.add_argument("--customer-body-id", type=int, default=None, help='explicit customer body ID')
     parser.add_argument("--report-output", default=None, help='optional assessment JSON output path')
+    parser.add_argument("--feedback-output", default=None, help='optional user feedback JSON output path')
+    parser.add_argument("--feedback-locale", default="en-US", choices=("en-US", "zh-CN"))
     parser.add_argument("--live-output", default=None, help='real-time feedback JSONL output path')
     parser.add_argument("--live-summary-output", default=None, help='real-time summary JSON output path')
     parser.add_argument("--live-display", action="store_true", help='show camera frames with feedback overlay')
@@ -309,7 +312,10 @@ def main():
         return 0
 
     analyse_folder = os.path.join(folder_customer, "analyse")
-    cached_report_ready = not args.report_output or Path(args.report_output).is_file()
+    cached_report_ready = (
+        (not args.report_output or Path(args.report_output).is_file())
+        and (not args.feedback_output or Path(args.feedback_output).is_file())
+    )
     if (function == "showVideos" and os.path.exists(analyse_folder)
             and os.listdir(analyse_folder) and cached_report_ready):
         # If analysis already exists, just show it
@@ -407,6 +413,15 @@ def main():
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         LOGGER.info("Assessment report written to %s", report_path)
+    if args.feedback_output:
+        feedback = create_feedback_summary(report, locale=args.feedback_locale)
+        feedback_path = Path(args.feedback_output)
+        feedback_path.parent.mkdir(parents=True, exist_ok=True)
+        feedback_path.write_text(
+            json.dumps(feedback, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        LOGGER.info("User feedback summary written to %s", feedback_path)
 
 
     if function == 'score':

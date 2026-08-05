@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/feedback-summary-v1.schema.json",
+  "title": "TrainerCam user-facing feedback summary",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "locale", "overall_score", "rating", "improvements", "quality_notice", "spoken_text", "disclaimer"],
+  "properties": {
+    "format": { "const": "trainercam.feedback-summary" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "locale": { "enum": ["en-US", "zh-CN"] },
+    "overall_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "rating": {
+      "type": "object",
+      "required": ["id", "headline"],
+      "properties": {
+        "id": { "enum": ["excellent", "good", "practice", "review"] },
+        "headline": { "type": "string", "minLength": 1 }
+      }
+    },
+    "improvements": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["feature_id", "label", "message"]
+      }
+    },
+    "quality_notice": { "type": ["string", "null"] },
+    "spoken_text": { "type": "string", "minLength": 1 },
+    "disclaimer": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,6 +1,6 @@
 QT       += core gui
 QT       += network
-QT += core gui network widgets
+QT += core gui network widgets texttospeech
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++17
@@ -13,6 +13,7 @@ SOURCES += \
     ../common/appconfig.cpp \
     ../common/applogger.cpp \
     ClientStuff.cpp \
+    assessmentresultdialog.cpp \
     analyse.cpp \
     login.cpp \
     main.cpp \
@@ -23,6 +24,7 @@ HEADERS += \
     ../common/appconfig.h \
     ../common/applogger.h \
     ClientStuff.h \
+    assessmentresultdialog.h \
     analyse.h \
     login.h \
     mainwindow.h \

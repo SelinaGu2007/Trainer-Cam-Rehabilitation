@@ -2,7 +2,7 @@
 
 TrainerCam is a rehabilitation exercise coaching prototype that records human motion with Azure Kinect, extracts 3D skeleton joints, compares a user's movement with a tutor demonstration, and visualizes motion differences.
 
-> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, streaming corrective feedback, configurable offline DTW assessment, and structured scoring reports. Clinically calibrated profiles and voice feedback are planned work rather than completed capabilities.
+> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, streaming corrective feedback, configurable offline DTW assessment, structured scoring reports, and user-controlled post-session voice feedback. Clinically calibrated profiles remain planned work rather than a completed capability.
 
 ![Motion analysis visualization](docs/motion_analysis.png)
 
@@ -195,6 +195,8 @@ The confidence handling, missing-joint repair, body normalisation and quality ga
 Persistent body-ID locking, the configurable training region, multi-person diagnostics, and pre-score session gates are documented in [docs/SUBJECT_TRACKING.md](docs/SUBJECT_TRACKING.md).
 
 Online reference alignment, feedback hysteresis/cooldown, live overlays, event files, and latency measurement are documented in [docs/REALTIME_FEEDBACK.md](docs/REALTIME_FEEDBACK.md).
+
+The accessible result window, user-facing summary format, language settings, and system voice feedback are documented in [docs/POST_SESSION_FEEDBACK.md](docs/POST_SESSION_FEEDBACK.md).
 
 Exercise-specific features, weights, tolerances, feedback, and the assessment report are documented in [docs/SCORING_AND_PROFILES.md](docs/SCORING_AND_PROFILES.md). The default engineering profile is `config/exercises/arm_raise.json`.
 

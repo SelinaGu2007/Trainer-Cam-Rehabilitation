@@ -1,6 +1,13 @@
 #include "analyse.h"
 #include "ui_analyse.h"
 #include "appconfig.h"
+#include "assessmentresultdialog.h"
+
+#include <QFile>
+#include <QFileInfo>
+#include <QTimer>
+
+#include <string>
 
 #pragma comment(lib,"user32")
 
@@ -16,6 +23,13 @@ Analyse::Analyse(QWidget *parent) :
     AnalyzerPrefixArguments = config.analyzerPrefixArguments;
     ExerciseProfile = config.exerciseProfile;
     SubjectTrackingConfig = config.subjectTrackingConfig;
+    FeedbackLocale = config.feedbackLocale;
+    VoiceFeedbackEnabled = config.voiceFeedbackEnabled;
+    VoiceRate = config.voiceRate;
+    VoiceVolume = config.voiceVolume;
+    FeedbackTimer = new QTimer(this);
+    FeedbackTimer->setInterval(200);
+    connect(FeedbackTimer, &QTimer::timeout, this, &Analyse::tryShowFeedback);
 }
 
 Analyse::~Analyse()
@@ -83,19 +97,29 @@ void Analyse::on_pushButtonAnalyse_clicked()
     QString dir2 = QDir::toNativeSeparators(folder_customer); // Ensure correct path separators
 
     QString program = AnalyzerProgram;
+    const QString assessmentPath = QDir(folder_customer).filePath("assessment.json");
+    const QString feedbackPath = QDir(folder_customer).filePath("feedback_summary.json");
+    QFile::remove(assessmentPath);
+    QFile::remove(feedbackPath);
     QStringList arguments = AnalyzerPrefixArguments;
     arguments << "--folder_tutor" << dir1
               << "--folder_customer" << dir2
               << "--profile" << ExerciseProfile
               << "--tracking-config" << SubjectTrackingConfig
-              << "--report-output" << QDir(folder_customer).filePath("assessment.json")
+              << "--report-output" << assessmentPath
+              << "--feedback-output" << feedbackPath
+              << "--feedback-locale" << FeedbackLocale
               << "--function" << "showVideos";
 
 
 
     QProcess *process = new QProcess(this);
+    ui->pushButtonAnalyse->setEnabled(false);
+    startFeedbackPolling(feedbackPath);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     connect(process, &QProcess::errorOccurred, this, [this, program](QProcess::ProcessError error) {
+        FeedbackTimer->stop();
+        ui->pushButtonAnalyse->setEnabled(true);
         QMessageBox::critical(
             this, "Analysis Error",
             QString("Unable to start the motion analyzer: %1\nError code: %2")
@@ -103,7 +127,9 @@ void Analyse::on_pushButtonAnalyse_clicked()
     });
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        ui->pushButtonAnalyse->setEnabled(true);
         if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+            FeedbackTimer->stop();
             const QString details = QString::fromUtf8(process->readAllStandardError()).trimmed();
             QMessageBox::warning(
                 this, "Session Quality Check",
@@ -157,42 +183,67 @@ void Analyse::on_pushButtonDelete_clicked()
 }
 
 void Analyse::moveWindowAnalyse(const wchar_t* windowName,QString dirname){
-
-    QDir Dir(dirname);
-    for( int i=0; i<=1500; i++){
-
-        if( Dir.exists()){
-            if(!Dir.isEmpty()){
-                HWND hwnd = FindWindow(nullptr, windowName);
-                if (hwnd != nullptr) {
-                        // Get the screen width
-                        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-                        // Set the new position for the window (adjust the values as needed)
-                        int newX = 0;
-                        int newY = screenHeight*1/6;
-
-
-                        MoveWindow(hwnd, newX, newY, screenWidth, screenHeight*5/6,true);// repaint the window
-                       // File.remove();
-                        break;
-
-                  }
-                else{
-                    Sleep(100);
-                }
-
+    auto *timer = new QTimer(this);
+    timer->setInterval(100);
+    timer->setProperty("attempts", 0);
+    const std::wstring title(windowName);
+    connect(timer, &QTimer::timeout, this, [timer, title, dirname]() {
+        const int attempts = timer->property("attempts").toInt() + 1;
+        timer->setProperty("attempts", attempts);
+        QDir directory(dirname);
+        if (directory.exists() && !directory.isEmpty()) {
+            HWND hwnd = FindWindow(nullptr, title.c_str());
+            if (hwnd != nullptr) {
+                const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+                const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+                MoveWindow(hwnd, 0, screenHeight / 6, screenWidth, screenHeight * 5 / 6, true);
+                timer->stop();
+                timer->deleteLater();
+                return;
             }
-            else
-                Sleep(100);
-
-        } else {
-            Sleep(100);
-
         }
-    }
+        if (attempts >= 1500) {
+            timer->stop();
+            timer->deleteLater();
+        }
+    });
+    timer->start();
+}
 
+void Analyse::startFeedbackPolling(const QString &feedbackPath)
+{
+    PendingFeedbackPath = feedbackPath;
+    FeedbackPollAttempts = 0;
+    FeedbackTimer->start();
+}
+
+void Analyse::tryShowFeedback()
+{
+    ++FeedbackPollAttempts;
+    if (QFileInfo::exists(PendingFeedbackPath)) {
+        auto *dialog = new AssessmentResultDialog(
+            PendingFeedbackPath,
+            VoiceFeedbackEnabled,
+            VoiceRate,
+            VoiceVolume,
+            this);
+        if (dialog->isValid()) {
+            FeedbackTimer->stop();
+            dialog->setAttribute(Qt::WA_DeleteOnClose);
+            dialog->show();
+            dialog->raise();
+            dialog->activateWindow();
+            return;
+        }
+        dialog->deleteLater();
+    }
+    if (FeedbackPollAttempts >= 1500) {
+        FeedbackTimer->stop();
+        QMessageBox::warning(
+            this,
+            "Assessment Result",
+            "The assessment completed without a readable feedback summary.");
+    }
 }
 
 

@@ -22,7 +22,11 @@ class ConfigurationTests(unittest.TestCase):
         config = json.loads((PROJECT_ROOT / "config" / "app.json").read_text(encoding="utf-8"))
         self.assertIn("paths", config)
         self.assertIn("network", config)
+        self.assertIn("feedback", config)
         self.assertGreater(config["network"]["port"], 0)
+        self.assertIn(config["feedback"]["locale"], ("en-US", "zh-CN"))
+        self.assertGreaterEqual(config["feedback"]["voice_volume"], 0.0)
+        self.assertLessEqual(config["feedback"]["voice_volume"], 1.0)
         for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile", "subject_tracking", "realtime_feedback"):
             self.assertTrue(config["paths"][key])
 
@@ -200,6 +204,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         output_folder = PROJECT_ROOT / ".test-motion-data" / "assessment-integration"
         output_folder.mkdir(parents=True, exist_ok=True)
         output_path = output_folder / "assessment.json"
+        feedback_path = output_folder / "feedback.json"
         command = [
             sys.executable,
             str(ANALYSIS_DIR / "main.py"),
@@ -213,17 +218,22 @@ class AnalysisIntegrationTests(unittest.TestCase):
             "report",
             "--report-output",
             str(output_path),
+            "--feedback-output",
+            str(feedback_path),
         ]
         try:
             completed = subprocess.run(command, check=True, capture_output=True, text=True)
             report = json.loads(completed.stdout)
             saved_report = json.loads(output_path.read_text(encoding="utf-8"))
+            feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
             self.assertEqual(report["format"], "trainercam.assessment-report")
             self.assertEqual(report["profile"]["id"], "arm_raise")
             self.assertEqual(len(report["feature_scores"]), 9)
             self.assertTrue(report["quality"]["tutor"]["subject_tracking"]["gate_passed"])
             self.assertTrue(report["quality"]["customer"]["subject_tracking"]["gate_passed"])
             self.assertEqual(saved_report["overall_score"], report["overall_score"])
+            self.assertEqual(feedback["format"], "trainercam.feedback-summary")
+            self.assertEqual(feedback["overall_score"], report["overall_score"])
             self.assertGreaterEqual(report["overall_score"], 0.0)
             self.assertLessEqual(report["overall_score"], 100.0)
         finally:

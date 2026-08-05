@@ -34,6 +34,7 @@ try {
     $null = Get-Content -Raw -Encoding UTF8 "schemas\realtime-feedback-config-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\realtime-feedback-event-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\realtime-feedback-summary-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\feedback-summary-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\exercises\arm_raise.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\subject_tracking.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\realtime_feedback.json" | ConvertFrom-Json
@@ -46,6 +47,7 @@ try {
             "test_exe\exercise_profile.py" `
             "test_exe\subject_tracking.py" `
             "test_exe\realtime_feedback.py" `
+            "test_exe\feedback_summary.py" `
             "test_exe\motion_data.py" `
             "test_exe\motion_preprocessing.py" `
             "test_exe\DTW.py" `

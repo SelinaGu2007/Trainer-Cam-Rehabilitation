@@ -8,6 +8,7 @@
 #include <QProcess>
 #include <QListWidgetItem>
 #include <QStringList>
+#include <QTimer>
 #include <Windows.h>
 namespace Ui {
 class Analyse;
@@ -23,10 +24,12 @@ public:
 
     void displayListDirectories1(const QString& directory);
     void moveWindowAnalyse(const wchar_t* windowName,QString dirname);
+    void startFeedbackPolling(const QString &feedbackPath);
 private slots:
     void on_pushButtonAnalyse_clicked();
     void onShowEvent1();
     void on_pushButtonDelete_clicked();
+    void tryShowFeedback();
 
 private:
     Ui::Analyse *ui;
@@ -36,6 +39,13 @@ private:
     QStringList AnalyzerPrefixArguments;
     QString ExerciseProfile;
     QString SubjectTrackingConfig;
+    QString FeedbackLocale;
+    bool VoiceFeedbackEnabled = true;
+    double VoiceRate = 0.0;
+    double VoiceVolume = 0.8;
+    QTimer *FeedbackTimer = nullptr;
+    QString PendingFeedbackPath;
+    int FeedbackPollAttempts = 0;
 
 protected:
     void showEvent(QShowEvent *event) override;

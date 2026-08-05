@@ -19,6 +19,10 @@ struct AppConfig
     QString exerciseProfile;
     QString subjectTrackingConfig;
     QString realtimeFeedbackConfig;
+    QString feedbackLocale;
+    bool voiceFeedbackEnabled = true;
+    double voiceRate = 0.0;
+    double voiceVolume = 0.8;
     QString host;
     quint16 port = 6547;
 

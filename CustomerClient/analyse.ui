@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Analyse</string>
+   <string>Assessment</string>
   </property>
   <property name="styleSheet">
    <string notr="true"/>
@@ -47,7 +47,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Analyse</string>
+        <string>View assessment</string>
        </property>
       </widget>
       <widget class="QPushButton" name="pushButtonDelete">

@@ -2,12 +2,14 @@ set(CUSTOMER_CLIENT_SOURCES
     ../common/appconfig.cpp
     ../common/applogger.cpp
     ClientStuff.cpp
+    assessmentresultdialog.cpp
     analyse.cpp
     login.cpp
     main.cpp
     mainwindow.cpp
     recordconfiguation.cpp
     ClientStuff.h
+    assessmentresultdialog.h
     analyse.h
     login.h
     mainwindow.h
@@ -18,6 +20,8 @@ set(CUSTOMER_CLIENT_SOURCES
     recordconfiguation.ui
     resources.qrc
 )
+
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS TextToSpeech)
 
 add_executable(CustomerClient WIN32 ${CUSTOMER_CLIENT_SOURCES})
 
@@ -31,6 +35,7 @@ target_link_libraries(CustomerClient PRIVATE
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::TextToSpeech
 )
 
 if(WIN32)

@@ -41,6 +41,8 @@ Both Qt clients read `config/app.json`. Relative paths are resolved from `projec
 
 `paths.realtime_feedback` selects the online alignment, feedback stabilisation, polling and completion settings. Existing local configuration files that omit it fall back to `config/realtime_feedback.json`.
 
+The `feedback` section selects the post-session summary locale and default voice state, rate and volume. CustomerClient uses Qt TextToSpeech and requires a compatible operating-system speech engine. The visual result remains available when speech is unavailable.
+
 Set `TRAINER_CAM_CONFIG` to use another configuration file:
 
 ```powershell

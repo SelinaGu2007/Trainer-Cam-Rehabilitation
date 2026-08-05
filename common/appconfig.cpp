@@ -119,6 +119,19 @@ AppConfig AppConfig::load()
         projectRoot,
         configuredRealtime.isEmpty() ? "config/realtime_feedback.json" : configuredRealtime);
 
+    const QJsonObject feedback = rootObject.value("feedback").toObject();
+    result.feedbackLocale = feedback.value("locale").toString("en-US").trimmed();
+    if (result.feedbackLocale != "en-US" && result.feedbackLocale != "zh-CN") {
+        throw std::runtime_error("feedback.locale must be en-US or zh-CN");
+    }
+    result.voiceFeedbackEnabled = feedback.value("voice_enabled").toBool(true);
+    result.voiceRate = feedback.value("voice_rate").toDouble(0.0);
+    result.voiceVolume = feedback.value("voice_volume").toDouble(0.8);
+    if (result.voiceRate < -1.0 || result.voiceRate > 1.0
+        || result.voiceVolume < 0.0 || result.voiceVolume > 1.0) {
+        throw std::runtime_error("feedback voice rate or volume is outside the supported range");
+    }
+
     const QJsonObject network = rootObject.value("network").toObject();
     result.host = requiredString(network, "host");
     const int configuredPort = network.value("port").toInt(6547);
