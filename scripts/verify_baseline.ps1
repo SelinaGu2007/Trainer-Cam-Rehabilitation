@@ -37,9 +37,13 @@ try {
     $null = Get-Content -Raw -Encoding UTF8 "schemas\realtime-feedback-summary-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\feedback-summary-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\session-review-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\acceptance-config-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\acceptance-report-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\release-manifest-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\exercises\arm_raise.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\subject_tracking.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\realtime_feedback.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "config\acceptance.json" | ConvertFrom-Json
 
     Write-Host "Compiling Python sources..."
     Invoke-Checked {
@@ -57,7 +61,9 @@ try {
             "test_exe\view_image.py" `
             "test_exe\save3D.py" `
             "show_videos\showvideo.py" `
-            "scripts\migrate_motion_data.py"
+            "scripts\migrate_motion_data.py" `
+            "scripts\run_acceptance.py" `
+            "scripts\create_release_manifest.py"
     } "Python source compilation failed."
 
     Write-Host "Running offline analysis tests..."

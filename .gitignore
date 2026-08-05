@@ -34,11 +34,13 @@ Makefile*
 __pycache__/
 *.pyc
 .test-motion-data/
+.test-acceptance/
 .venv/
 venv/
 env/
 logs/
 config/app.local.json
+artifacts/
 
 # PyInstaller outputs
 **/dist/

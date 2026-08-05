@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/acceptance-config-v1.schema.json",
+  "title": "TrainerCam engineering acceptance configuration",
+  "type": "object",
+  "required": ["format", "schema_version", "samples", "regression", "performance", "privacy"],
+  "properties": {
+    "format": { "const": "trainercam.acceptance-config" },
+    "schema_version": { "const": 1 },
+    "samples": {
+      "type": "object",
+      "required": ["tutor_session", "customer_session", "profile"]
+    },
+    "regression": {
+      "type": "object",
+      "required": ["expected_overall_score", "score_tolerance", "minimum_required_joint_coverage", "expected_alignment_path_length"]
+    },
+    "performance": {
+      "type": "object",
+      "required": ["maximum_offline_artifact_seconds"]
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["allowed_sample_paths"],
+      "properties": {
+        "allowed_sample_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

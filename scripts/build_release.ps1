@@ -5,7 +5,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OpenCvRoot,
 
-    [string]$NuGetExe = "nuget.exe"
+    [string]$NuGetExe = "nuget.exe",
+
+    [string]$PythonCommand = "python",
+
+    [switch]$AllowDirty
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,8 +46,28 @@ foreach ($RequiredFile in @($MSBuild, $CMake, $WinDeployQt, $QtConfig)) {
     }
 }
 
+$Python = Get-Command $PythonCommand -ErrorAction SilentlyContinue
+if (-not $Python) {
+    throw "Python was not found: $PythonCommand"
+}
+
 Push-Location $ProjectRoot
 try {
+    $GitStatus = & git status --porcelain
+    if ($LASTEXITCODE -ne 0) { throw "Unable to inspect the Git worktree." }
+    if ($GitStatus -and -not $AllowDirty) {
+        throw "Release builds require a clean Git worktree. Commit changes or pass -AllowDirty for development-only verification."
+    }
+
+    $ArtifactsDirectory = Join-Path $ProjectRoot "artifacts"
+    $AcceptanceReport = Join-Path $ArtifactsDirectory "acceptance-report.json"
+    $ReleaseManifest = Join-Path $ArtifactsDirectory "release-manifest.json"
+    & (Join-Path $PSScriptRoot "verify_baseline.ps1") -PythonCommand $Python.Source
+    Invoke-Checked $Python.Source @(
+        "scripts\run_acceptance.py",
+        "--output", $AcceptanceReport
+    ) "Engineering acceptance failed."
+
     $KinectPackages = "simple_3d_viewer\packages"
     if (-not (Test-Path -LiteralPath "$KinectPackages\Microsoft.Azure.Kinect.Sensor.1.4.1")) {
         $NuGetCommand = Get-Command $NuGetExe -ErrorAction SilentlyContinue
@@ -60,7 +84,7 @@ try {
     $env:OPENCV_DIR = (Resolve-Path -LiteralPath $OpenCvRoot).Path
     Invoke-Checked $MSBuild @(
         "simple_3d_viewer\simple_3d_viewer.sln",
-        "/m", "/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal"
+        "/m:1", "/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal"
     ) "Azure Kinect recorder Release build failed."
 
     $QtBuildDirectory = Join-Path $ProjectRoot "build-qt-cmake"
@@ -73,8 +97,7 @@ try {
     ) "Qt CMake configuration failed."
     Invoke-Checked $CMake @(
         "--build", $QtBuildDirectory,
-        "--config", "Release",
-        "--parallel"
+        "--config", "Release"
     ) "Qt Release build failed."
 
     foreach ($Client in @("TutorClient", "CustomerClient")) {
@@ -84,10 +107,21 @@ try {
         ) "Qt runtime deployment failed for $Client."
     }
 
+    Invoke-Checked $Python.Source @(
+        "scripts\create_release_manifest.py",
+        "--acceptance-report", $AcceptanceReport,
+        "--output", $ReleaseManifest,
+        "--root", "kinect-recorder=simple_3d_viewer\build\bin\Release",
+        "--root", "tutor-client=build-qt-cmake\TutorClient\Release",
+        "--root", "customer-client=build-qt-cmake\CustomerClient\Release"
+    ) "Release manifest generation failed."
+
     Write-Host "Release builds completed successfully."
     Write-Host "Kinect: simple_3d_viewer\build\bin\Release\simple_3d_viewer.exe"
     Write-Host "Tutor:  build-qt-cmake\TutorClient\Release\TutorClient.exe"
     Write-Host "Client: build-qt-cmake\CustomerClient\Release\CustomerClient.exe"
+    Write-Host "Evidence: artifacts\acceptance-report.json"
+    Write-Host "Manifest: artifacts\release-manifest.json"
 } finally {
     Pop-Location
 }

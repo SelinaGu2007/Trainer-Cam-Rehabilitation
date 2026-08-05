@@ -63,13 +63,18 @@ The verified command-line path uses the root `CMakeLists.txt`, Visual Studio 202
 .\scripts\build_release.ps1 `
     -QtRoot "D:\Qt\6.6.2\msvc2019_64" `
     -OpenCvRoot "D:\opencv\build" `
-    -NuGetExe "C:\tools\nuget.exe"
+    -NuGetExe "C:\tools\nuget.exe" `
+    -PythonCommand "python"
 ```
+
+The unified Release script requires a clean Git worktree and a passing engineering acceptance report before compilation. `-AllowDirty` is available only for local development verification. See [ENGINEERING_ACCEPTANCE.md](ENGINEERING_ACCEPTANCE.md) for the exact checks and validation limits.
 
 The Qt Release executables are written to:
 
 - `build-qt-cmake/TutorClient/Release/TutorClient.exe`
 - `build-qt-cmake/CustomerClient/Release/CustomerClient.exe`
+
+Machine-specific release evidence is written to `artifacts/acceptance-report.json` and `artifacts/release-manifest.json`. The manifest inventories the deployed Release directories with relative paths, sizes and SHA-256 values.
 
 The existing `.pro` files can still be opened in Qt Creator, but CMake is the reproducible command-line baseline.
 

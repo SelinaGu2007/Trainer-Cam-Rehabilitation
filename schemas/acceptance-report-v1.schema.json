@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/acceptance-report-v1.schema.json",
+  "title": "TrainerCam engineering acceptance report",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "source_revision", "environment", "summary", "checks", "limitations"],
+  "properties": {
+    "format": { "const": "trainercam.acceptance-report" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "source_revision": {
+      "type": "object",
+      "required": ["commit", "dirty"]
+    },
+    "environment": {
+      "type": "object",
+      "required": ["python", "platform"]
+    },
+    "summary": {
+      "type": "object",
+      "required": ["passed", "check_count", "passed_count", "failed_count"]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "duration_ms", "detail", "metrics"],
+        "properties": {
+          "status": { "enum": ["passed", "failed"] },
+          "duration_ms": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "limitations": {
+      "type": "object",
+      "required": ["clinical_validation", "hardware_validation"]
+    }
+  }
+}
