@@ -583,6 +583,14 @@ int main(int argc, char** argv)
                   << " (" << directoryError.message() << ")" << std::endl;
         return 3;
     }
+    std::error_code markerError;
+    std::filesystem::remove(basePath + "\\recording.complete", markerError);
+    if (markerError)
+    {
+        std::cerr << "Unable to remove stale recording completion marker: "
+                  << markerError.message() << std::endl;
+        return 7;
+    }
 
     std::ofstream outputFile(basePath+"\\output2.txt");
     if (!outputFile.is_open())
@@ -651,5 +659,13 @@ int main(int argc, char** argv)
     sessionLog << std::put_time(&finishedLocalTime, "%Y-%m-%dT%H:%M:%S")
                << " recorder_finished" << std::endl;
     sessionLog.close();
+    std::ofstream completionMarker(basePath + "\\recording.complete");
+    if (!completionMarker.is_open())
+    {
+        std::cerr << "Unable to write recording completion marker in: " << basePath << std::endl;
+        return 8;
+    }
+    completionMarker << "complete\n";
+    completionMarker.close();
     return 0;
 }

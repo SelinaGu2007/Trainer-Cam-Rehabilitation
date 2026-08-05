@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/realtime-feedback-config-v1.schema.json",
+  "title": "TrainerCam real-time feedback configuration",
+  "type": "object",
+  "required": ["format", "schema_version", "alignment", "feedback", "runtime"],
+  "properties": {
+    "format": { "const": "trainercam.realtime-feedback-config" },
+    "schema_version": { "const": 1 },
+    "alignment": {
+      "type": "object",
+      "required": ["lookahead_frames", "backtrack_frames", "reference_smoothing_sigma"],
+      "properties": {
+        "lookahead_frames": { "type": "integer", "minimum": 1 },
+        "backtrack_frames": { "type": "integer", "minimum": 0 },
+        "reference_smoothing_sigma": { "type": "number", "minimum": 0 }
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "required": ["minimum_bad_frames", "minimum_good_frames", "cooldown_ms", "tracking_warning_frames"],
+      "properties": {
+        "minimum_bad_frames": { "type": "integer", "minimum": 1 },
+        "minimum_good_frames": { "type": "integer", "minimum": 1 },
+        "cooldown_ms": { "type": "integer", "minimum": 0 },
+        "tracking_warning_frames": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["poll_interval_ms", "startup_timeout_sec", "completion_marker"],
+      "properties": {
+        "poll_interval_ms": { "type": "integer", "minimum": 10 },
+        "startup_timeout_sec": { "type": "number", "exclusiveMinimum": 0 },
+        "completion_marker": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

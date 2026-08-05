@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <QTextStream>
 
 #include <stdexcept>
@@ -97,6 +98,14 @@ AppConfig AppConfig::load()
     result.recorderProgram = resolvePath(projectRoot, requiredString(paths, "recorder"));
     result.videoPlayerProgram = resolvePath(projectRoot, requiredString(paths, "video_player"));
     result.analyzerProgram = resolvePath(projectRoot, requiredString(paths, "analyzer"));
+    if (!QFileInfo::exists(result.analyzerProgram)) {
+        const QString sourceAnalyzer = projectRoot.filePath("test_exe/main.py");
+        const QString pythonProgram = QStandardPaths::findExecutable("python");
+        if (QFileInfo::exists(sourceAnalyzer) && !pythonProgram.isEmpty()) {
+            result.analyzerProgram = pythonProgram;
+            result.analyzerPrefixArguments << QDir::cleanPath(sourceAnalyzer);
+        }
+    }
     const QString configuredProfile = paths.value("exercise_profile").toString().trimmed();
     result.exerciseProfile = resolvePath(
         projectRoot,
@@ -105,6 +114,10 @@ AppConfig AppConfig::load()
     result.subjectTrackingConfig = resolvePath(
         projectRoot,
         configuredTracking.isEmpty() ? "config/subject_tracking.json" : configuredTracking);
+    const QString configuredRealtime = paths.value("realtime_feedback").toString().trimmed();
+    result.realtimeFeedbackConfig = resolvePath(
+        projectRoot,
+        configuredRealtime.isEmpty() ? "config/realtime_feedback.json" : configuredRealtime);
 
     const QJsonObject network = rootObject.value("network").toObject();
     result.host = requiredString(network, "host");

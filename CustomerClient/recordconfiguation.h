@@ -19,6 +19,8 @@
 #include <Windows.h>
 #include <QMainWindow>
 #include <QFile>
+#include <QMessageBox>
+#include <QStringList>
 namespace Ui {
 class RecordConfiguation;
 }
@@ -41,6 +43,11 @@ private:
     QString RecordingFolder;
     QString RecorderProgram;
     QString VideoPlayerProgram;
+    QString AnalyzerProgram;
+    QStringList AnalyzerPrefixArguments;
+    QString ExerciseProfile;
+    QString SubjectTrackingConfig;
+    QString RealtimeFeedbackConfig;
 
 
 private slots:

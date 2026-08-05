@@ -13,6 +13,7 @@ Analyse::Analyse(QWidget *parent) :
     TutorFolder = config.tutorRecordingsDir;
     MyRecordingFolder = config.customerRecordingsDir;
     AnalyzerProgram = config.analyzerProgram;
+    AnalyzerPrefixArguments = config.analyzerPrefixArguments;
     ExerciseProfile = config.exerciseProfile;
     SubjectTrackingConfig = config.subjectTrackingConfig;
 }
@@ -82,7 +83,7 @@ void Analyse::on_pushButtonAnalyse_clicked()
     QString dir2 = QDir::toNativeSeparators(folder_customer); // Ensure correct path separators
 
     QString program = AnalyzerProgram;
-    QStringList arguments;
+    QStringList arguments = AnalyzerPrefixArguments;
     arguments << "--folder_tutor" << dir1
               << "--folder_customer" << dir2
               << "--profile" << ExerciseProfile

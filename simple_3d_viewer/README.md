@@ -5,6 +5,10 @@
 The Azure Kinect Body Tracking Simple3dViewer sample creates a 3d window that visualizes all the information provided
 by the body tracking SDK.
 
+The recorder writes `recording.complete` after `session.json`, `frames.jsonl`,
+`output2.txt`, and the session log have been flushed. Streaming analysis uses
+this marker to finish without reading a partial final frame.
+
 ## Usage Info
 
 USAGE: simple_3d_viewer.exe SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, OFFLINE](optional)

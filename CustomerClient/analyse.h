@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QListWidgetItem>
+#include <QStringList>
 #include <Windows.h>
 namespace Ui {
 class Analyse;
@@ -32,6 +33,7 @@ private:
     QString TutorFolder;
     QString MyRecordingFolder;
     QString AnalyzerProgram;
+    QStringList AnalyzerPrefixArguments;
     QString ExerciseProfile;
     QString SubjectTrackingConfig;
 

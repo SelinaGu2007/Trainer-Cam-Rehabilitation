@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/realtime-feedback-summary-v1.schema.json",
+  "title": "TrainerCam real-time feedback summary",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "selected_body_id", "subject_locked", "processed_frame_count", "event_counts", "processing_latency_ms", "output_file"],
+  "properties": {
+    "format": { "const": "trainercam.realtime-feedback-summary" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "selected_body_id": { "type": ["integer", "null"], "minimum": 0 },
+    "subject_locked": { "type": "boolean" },
+    "processed_frame_count": { "type": "integer", "minimum": 0 },
+    "event_counts": {
+      "type": "object",
+      "required": ["adjust", "correct", "tracking"],
+      "additionalProperties": false,
+      "properties": {
+        "adjust": { "type": "integer", "minimum": 0 },
+        "correct": { "type": "integer", "minimum": 0 },
+        "tracking": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "processing_latency_ms": {
+      "type": "object",
+      "required": ["mean", "p95", "maximum"],
+      "properties": {
+        "mean": { "type": ["number", "null"], "minimum": 0 },
+        "p95": { "type": ["number", "null"], "minimum": 0 },
+        "maximum": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "output_file": { "type": "string", "minLength": 1 }
+  }
+}

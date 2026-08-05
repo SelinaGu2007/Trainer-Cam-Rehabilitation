@@ -8,7 +8,8 @@
     "video_player": "show_videos/dist/showvideo/showvideo.exe",
     "analyzer": "test_exe/dist/main/main.exe",
     "exercise_profile": "config/exercises/arm_raise.json",
-    "subject_tracking": "config/subject_tracking.json"
+    "subject_tracking": "config/subject_tracking.json",
+    "realtime_feedback": "config/realtime_feedback.json"
   },
   "network": {
     "host": "127.0.0.1",

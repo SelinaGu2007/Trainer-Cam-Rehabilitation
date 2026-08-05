@@ -39,6 +39,8 @@ Both Qt clients read `config/app.json`. Relative paths are resolved from `projec
 
 `paths.subject_tracking` selects the training-region and subject-locking configuration passed to the analyzer. Existing local configuration files that omit it fall back to `config/subject_tracking.json`.
 
+`paths.realtime_feedback` selects the online alignment, feedback stabilisation, polling and completion settings. Existing local configuration files that omit it fall back to `config/realtime_feedback.json`.
+
 Set `TRAINER_CAM_CONFIG` to use another configuration file:
 
 ```powershell
@@ -68,6 +70,8 @@ The Qt Release executables are written to:
 The existing `.pro` files can still be opened in Qt Creator, but CMake is the reproducible command-line baseline.
 
 The clients expect the recorder, video player and analyzer at the paths declared in `config/app.json`. Those programs can also be launched from source during development by changing a local configuration.
+
+If the packaged analyzer configured at `paths.analyzer` is absent, the Qt clients automatically fall back to `python test_exe/main.py` when Python is available on `PATH`. A packaged analyzer remains preferred for deployment.
 
 ## Azure Kinect recorder
 

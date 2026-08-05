@@ -88,3 +88,4 @@ Use `--overwrite` only when intentionally regenerating `session.json` and `frame
 - Writers produce v1 plus the legacy export for the current transition period.
 - Future incompatible changes increment `schema_version` and require an explicit migration.
 - Derived features, DTW paths, scores, and feedback are analysis results and should not be mixed into raw `frames.jsonl` records.
+- `recording.complete` is written only after the recorder closes and flushes the raw motion streams. Streaming consumers use it as an end-of-session marker.

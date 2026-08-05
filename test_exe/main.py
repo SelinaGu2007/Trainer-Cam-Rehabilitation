@@ -13,6 +13,7 @@ from assessment import create_assessment_report, score_errors, weighted_sequence
 from exercise_profile import load_profile
 from motion_data import load_legacy_frames, load_session_bodies, load_session_track
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
+from realtime_feedback import load_realtime_config, run_realtime_feedback
 from subject_tracking import load_tracking_config
 
 try:
@@ -246,12 +247,17 @@ def getargs(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='two folder', add_help=True)
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
-    parser.add_argument("--function", default='NULL', help='select from tracking,quality,report,showVideos,score,showMaxDiffetence')
+    parser.add_argument("--function", default='NULL', help='select from realtime,tracking,quality,report,showVideos,score,showMaxDiffetence')
     parser.add_argument("--profile", default=None, help='exercise profile id or JSON path')
     parser.add_argument("--tracking-config", default=None, help='subject tracking JSON path')
+    parser.add_argument("--realtime-config", default=None, help='real-time feedback JSON path')
     parser.add_argument("--tutor-body-id", type=int, default=None, help='explicit tutor body ID')
     parser.add_argument("--customer-body-id", type=int, default=None, help='explicit customer body ID')
     parser.add_argument("--report-output", default=None, help='optional assessment JSON output path')
+    parser.add_argument("--live-output", default=None, help='real-time feedback JSONL output path')
+    parser.add_argument("--live-summary-output", default=None, help='real-time summary JSON output path')
+    parser.add_argument("--live-display", action="store_true", help='show camera frames with feedback overlay')
+    parser.add_argument("--live-max-wait-seconds", type=float, default=3600.0)
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--min-confidence", type=int, default=1, choices=range(4))
     parser.add_argument("--max-interpolation-gap", type=int, default=3)
@@ -283,6 +289,24 @@ def main():
     tracking_config = load_tracking_config(args.tracking_config)
     LOGGER.info("Using exercise profile id=%s source=%s", profile.profile_id, profile.source_path)
     LOGGER.info("Using subject tracking config source=%s", tracking_config.source_path)
+    if function == "realtime":
+        if args.live_max_wait_seconds <= 0:
+            raise ValueError("--live-max-wait-seconds must be positive")
+        realtime_config = load_realtime_config(args.realtime_config)
+        LOGGER.info("Using real-time feedback config source=%s", realtime_config.source_path)
+        summary = run_realtime_feedback(
+            tutor_folder=folder_tutor,
+            customer_folder=folder_customer,
+            profile=profile,
+            tracking_config=tracking_config,
+            realtime_config=realtime_config,
+            output_path=args.live_output,
+            summary_path=args.live_summary_output,
+            display=args.live_display,
+            max_wait_seconds=args.live_max_wait_seconds,
+        )
+        LOGGER.info("Real-time feedback completed: %s", summary)
+        return 0
 
     analyse_folder = os.path.join(folder_customer, "analyse")
     cached_report_ready = not args.report_output or Path(args.report_output).is_file()
@@ -430,7 +454,7 @@ def main():
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: tracking, quality, report, score, showVideos, showMaxDiffetence")
+        raise ValueError("Unknown --function. Use: realtime, tracking, quality, report, score, showVideos, showMaxDiffetence")
 
     return 0
 

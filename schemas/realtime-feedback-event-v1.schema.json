@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/realtime-feedback-event-v1.schema.json",
+  "title": "TrainerCam real-time feedback event",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "status", "frame_index", "message", "processing_latency_ms"],
+  "properties": {
+    "format": { "const": "trainercam.realtime-feedback-event" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "status": { "enum": ["adjust", "correct", "tracking"] },
+    "frame_index": { "type": "integer", "minimum": 0 },
+    "reference_frame_index": { "type": ["integer", "null"], "minimum": 0 },
+    "feature_id": { "type": ["string", "null"] },
+    "feature_label": { "type": ["string", "null"] },
+    "score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "error_deg": { "type": ["number", "null"], "minimum": 0 },
+    "message": { "type": "string", "minLength": 1 },
+    "processing_latency_ms": { "type": "number", "minimum": 0 }
+  }
+}

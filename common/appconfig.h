@@ -2,6 +2,7 @@
 #define APPCONFIG_H
 
 #include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
 struct AppConfig
@@ -14,8 +15,10 @@ struct AppConfig
     QString recorderProgram;
     QString videoPlayerProgram;
     QString analyzerProgram;
+    QStringList analyzerPrefixArguments;
     QString exerciseProfile;
     QString subjectTrackingConfig;
+    QString realtimeFeedbackConfig;
     QString host;
     quint16 port = 6547;
 

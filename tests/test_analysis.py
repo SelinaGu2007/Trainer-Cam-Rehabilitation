@@ -23,7 +23,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("paths", config)
         self.assertIn("network", config)
         self.assertGreater(config["network"]["port"], 0)
-        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile", "subject_tracking"):
+        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile", "subject_tracking", "realtime_feedback"):
             self.assertTrue(config["paths"][key])
 
 

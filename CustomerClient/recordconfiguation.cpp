@@ -15,6 +15,11 @@ RecordConfiguation::RecordConfiguation(QWidget *parent) :
     RecordingFolder = config.customerRecordingsDir;
     RecorderProgram = config.recorderProgram;
     VideoPlayerProgram = config.videoPlayerProgram;
+    AnalyzerProgram = config.analyzerProgram;
+    AnalyzerPrefixArguments = config.analyzerPrefixArguments;
+    ExerciseProfile = config.exerciseProfile;
+    SubjectTrackingConfig = config.subjectTrackingConfig;
+    RealtimeFeedbackConfig = config.realtimeFeedbackConfig;
 }
 
 RecordConfiguation::~RecordConfiguation()
@@ -122,9 +127,42 @@ void RecordConfiguation::on_pushButtonRecord_clicked()
     // Create process
     QProcess *process = new QProcess(this);
     QProcess *process1 =new QProcess(this);
+    QProcess *feedbackProcess = new QProcess(this);
+
+    QStringList feedbackArguments = AnalyzerPrefixArguments;
+    feedbackArguments << "--folder_tutor" << dir1
+                      << "--folder_customer" << dir
+                      << "--profile" << ExerciseProfile
+                      << "--tracking-config" << SubjectTrackingConfig
+                      << "--realtime-config" << RealtimeFeedbackConfig
+                      << "--live-output" << QDir(dir).filePath("live_feedback.jsonl")
+                      << "--live-summary-output" << QDir(dir).filePath("live_feedback_summary.json")
+                      << "--live-display"
+                      << "--function" << "realtime";
+    feedbackProcess->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(feedbackProcess, &QProcess::readyReadStandardOutput,
+            feedbackProcess, [feedbackProcess]() {
+        feedbackProcess->readAllStandardOutput();
+    });
+    connect(feedbackProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError) {
+        QMessageBox::warning(this, "Live Feedback", "Unable to start real-time feedback.");
+    });
+    connect(feedbackProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, feedbackProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+            const QString details = QString::fromUtf8(feedbackProcess->readAllStandardError()).trimmed();
+            QMessageBox::warning(
+                this, "Live Feedback",
+                "Real-time feedback stopped before the recording finished."
+                + (details.isEmpty() ? QString() : "\n\n" + details));
+        }
+        feedbackProcess->deleteLater();
+    });
 
     // Start the process
     process->start(program, QStringList() << dir);
+    feedbackProcess->start(AnalyzerProgram, feedbackArguments);
     moveWindowToRight(L"Color_Image",dir+"\\flag.txt");
     process1->start(program1,QStringList()<< "--folder"<<dir1<<"--mode"<<"withRecording");
     moveWindowToLeft(L"Tutor",dir+"\\flag2.txt");

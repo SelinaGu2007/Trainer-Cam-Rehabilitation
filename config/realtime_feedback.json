@@ -1,0 +1,20 @@
+{
+  "format": "trainercam.realtime-feedback-config",
+  "schema_version": 1,
+  "alignment": {
+    "lookahead_frames": 20,
+    "backtrack_frames": 2,
+    "reference_smoothing_sigma": 2.0
+  },
+  "feedback": {
+    "minimum_bad_frames": 3,
+    "minimum_good_frames": 3,
+    "cooldown_ms": 1200,
+    "tracking_warning_frames": 5
+  },
+  "runtime": {
+    "poll_interval_ms": 50,
+    "startup_timeout_sec": 30,
+    "completion_marker": "recording.complete"
+  }
+}
