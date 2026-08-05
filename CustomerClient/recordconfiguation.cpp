@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdio>
 #include "appconfig.h"
+#include <exception>
 #pragma comment(lib,"user32")
 RecordConfiguation::RecordConfiguation(QWidget *parent) :
     QWidget(parent),
@@ -120,6 +121,25 @@ void RecordConfiguation::on_pushButtonRecord_clicked()
     }
 
     QString program = RecorderProgram;
+    const AppConfig &config = AppConfig::instance();
+    QString recordingInput = config.captureRecordingPath;
+    if (config.captureUsesRecording() && recordingInput.isEmpty()) {
+        recordingInput = QFileDialog::getOpenFileName(
+            this,
+            "Select Azure Kinect recording",
+            QString(),
+            "Azure Kinect recordings (*.mkv);;All files (*)");
+        if (recordingInput.isEmpty()) {
+            return;
+        }
+    }
+    QStringList recorderArguments;
+    try {
+        recorderArguments = config.recorderArguments(dir, recordingInput);
+    } catch (const std::exception &error) {
+        QMessageBox::critical(this, "Capture source", error.what());
+        return;
+    }
 
     QString dir1 = QDir(TutorFolder).filePath(subdir1);
     QString program1 = VideoPlayerProgram;
@@ -161,7 +181,7 @@ void RecordConfiguation::on_pushButtonRecord_clicked()
     });
 
     // Start the process
-    process->start(program, QStringList() << dir);
+    process->start(program, recorderArguments);
     feedbackProcess->start(AnalyzerProgram, feedbackArguments);
     moveWindowToRight(L"Color_Image",dir+"\\flag.txt");
     process1->start(program1,QStringList()<< "--folder"<<dir1<<"--mode"<<"withRecording");

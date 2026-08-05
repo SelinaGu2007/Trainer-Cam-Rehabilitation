@@ -2,7 +2,7 @@
 
 TrainerCam is a rehabilitation exercise coaching prototype that records human motion with Azure Kinect, extracts 3D skeleton joints, compares a user's movement with a tutor demonstration, and visualizes motion differences.
 
-> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, streaming corrective feedback, configurable offline DTW assessment, structured scoring reports, and user-controlled post-session voice feedback. Clinically calibrated profiles remain planned work rather than a completed capability.
+> **Current implementation scope:** this repository provides modular Azure Kinect live/MKV capture, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, streaming corrective feedback, configurable offline DTW assessment, structured scoring reports, and user-controlled post-session voice feedback. RGB/mobile capture and clinically calibrated profiles remain planned work rather than completed capabilities.
 
 ![Motion analysis visualization](docs/motion_analysis.png)
 
@@ -34,6 +34,8 @@ The project includes:
 - Qt desktop interfaces for tutor and customer workflows
 - Python scripts for skeleton processing, motion alignment, scoring, and visualization
 - Playback utilities for recorded image sequences
+
+The recorder exposes one capture-source boundary for a live Azure Kinect and a recorded Azure Kinect MKV. Driver configuration, offline file selection and extension rules are documented in [docs/MODULAR_CAPTURE.md](docs/MODULAR_CAPTURE.md).
 
 ## Method
 

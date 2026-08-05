@@ -21,6 +21,7 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QStringList>
+#include <QFileDialog>
 namespace Ui {
 class RecordConfiguation;
 }

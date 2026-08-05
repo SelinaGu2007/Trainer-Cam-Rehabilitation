@@ -60,6 +60,41 @@ QString resolvePath(const QDir &root, const QString &value)
 
 } // namespace
 
+bool AppConfig::captureUsesRecording() const
+{
+    return captureDriver == "azure-kinect-recording";
+}
+
+QStringList AppConfig::recorderArguments(
+    const QString &outputDirectory, const QString &recordingOverride) const
+{
+    QStringList arguments = {
+        outputDirectory,
+        "--source", captureDriver,
+        "--depth-mode", captureDepthMode,
+        "--processing-mode", captureProcessingMode
+    };
+    if (!captureModelPath.isEmpty()) {
+        arguments << "--model" << captureModelPath;
+    }
+    if (captureUsesRecording()) {
+        const QString input = recordingOverride.trimmed().isEmpty()
+                                  ? captureRecordingPath
+                                  : QDir::cleanPath(recordingOverride);
+        if (input.isEmpty()) {
+            throw std::runtime_error(
+                "The configured recording capture driver requires an Azure Kinect MKV input");
+        }
+        const QFileInfo inputInfo(input);
+        if (!inputInfo.exists() || !inputInfo.isFile()) {
+            throw std::runtime_error(
+                QString("Azure Kinect recording does not exist: %1").arg(input).toStdString());
+        }
+        arguments << "--input" << inputInfo.absoluteFilePath();
+    }
+    return arguments;
+}
+
 const AppConfig &AppConfig::instance()
 {
     static const AppConfig config = load();
@@ -118,6 +153,32 @@ AppConfig AppConfig::load()
     result.realtimeFeedbackConfig = resolvePath(
         projectRoot,
         configuredRealtime.isEmpty() ? "config/realtime_feedback.json" : configuredRealtime);
+
+    const QJsonObject capture = rootObject.value("capture").toObject();
+    result.captureDriver = capture.value("driver").toString("azure-kinect-live").trimmed();
+    if (result.captureDriver != "azure-kinect-live"
+        && result.captureDriver != "azure-kinect-recording") {
+        throw std::runtime_error(
+            "capture.driver must be azure-kinect-live or azure-kinect-recording");
+    }
+    result.captureDepthMode = capture.value("depth_mode").toString("NFOV_UNBINNED").trimmed();
+    if (result.captureDepthMode != "NFOV_UNBINNED"
+        && result.captureDepthMode != "WFOV_BINNED") {
+        throw std::runtime_error("capture.depth_mode is not supported");
+    }
+    result.captureProcessingMode = capture.value("processing_mode").toString("DIRECTML").trimmed();
+    const QStringList processingModes = {"CPU", "CUDA", "DIRECTML", "TENSORRT"};
+    if (!processingModes.contains(result.captureProcessingMode)) {
+        throw std::runtime_error("capture.processing_mode is not supported");
+    }
+    const QString configuredModel = capture.value("model_path").toString().trimmed();
+    result.captureModelPath = configuredModel.isEmpty()
+                                  ? QString()
+                                  : resolvePath(projectRoot, configuredModel);
+    const QString configuredRecording = capture.value("recording_path").toString().trimmed();
+    result.captureRecordingPath = configuredRecording.isEmpty()
+                                      ? QString()
+                                      : resolvePath(projectRoot, configuredRecording);
 
     const QJsonObject feedback = rootObject.value("feedback").toObject();
     result.feedbackLocale = feedback.value("locale").toString("en-US").trimmed();

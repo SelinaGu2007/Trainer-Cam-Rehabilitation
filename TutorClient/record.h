@@ -9,6 +9,7 @@
 #include <QMessageBox>
 #include <Windows.h>
 #include <QInputDialog>
+#include <QFileDialog>
 namespace Ui {
 class Record;
 }

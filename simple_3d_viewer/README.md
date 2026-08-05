@@ -9,9 +9,15 @@ The recorder writes `recording.complete` after `session.json`, `frames.jsonl`,
 `output2.txt`, and the session log have been flushed. Streaming analysis uses
 this marker to finish without reading a partial final frame.
 
+Capture acquisition is isolated behind `CaptureSource`. Use
+`--source azure-kinect-live` for device 0 or
+`--source azure-kinect-recording --input FILE.mkv` for deterministic offline
+processing. Both drivers use the same body-tracking and session-writing loop;
+the legacy `OFFLINE FILE.mkv` command remains supported.
+
 ## Usage Info
 
-USAGE: simple_3d_viewer.exe SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, OFFLINE](optional)
+USAGE: simple_3d_viewer.exe OUTPUT_FOLDER [--source DRIVER] [--input FILE.mkv] [--depth-mode MODE] [--processing-mode MODE]
 * SensorMode:
   * NFOV_UNBINNED (default) - Narraw Field of View Unbinned Mode [Resolution: 640x576; FOI: 75 degree x 65 degree]
   * WFOV_BINNED             - Wide Field of View Binned Mode [Resolution: 512x512; FOI: 120 degree x 120 degree]

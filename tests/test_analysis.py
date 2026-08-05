@@ -22,11 +22,24 @@ class ConfigurationTests(unittest.TestCase):
         config = json.loads((PROJECT_ROOT / "config" / "app.json").read_text(encoding="utf-8"))
         self.assertIn("paths", config)
         self.assertIn("network", config)
+        self.assertIn("capture", config)
         self.assertIn("feedback", config)
         self.assertGreater(config["network"]["port"], 0)
         self.assertIn(config["feedback"]["locale"], ("en-US", "zh-CN"))
         self.assertGreaterEqual(config["feedback"]["voice_volume"], 0.0)
         self.assertLessEqual(config["feedback"]["voice_volume"], 1.0)
+        self.assertIn(
+            config["capture"]["driver"],
+            ("azure-kinect-live", "azure-kinect-recording"),
+        )
+        self.assertIn(
+            config["capture"]["depth_mode"],
+            ("NFOV_UNBINNED", "WFOV_BINNED"),
+        )
+        self.assertIn(
+            config["capture"]["processing_mode"],
+            ("CPU", "CUDA", "DIRECTML", "TENSORRT"),
+        )
         for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile", "subject_tracking", "realtime_feedback"):
             self.assertTrue(config["paths"][key])
 
@@ -146,6 +159,20 @@ Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidenc
         (self.temporary / "session.json").write_text(json.dumps(manifest), encoding="utf-8")
         with self.assertRaises(motion_data.MotionDataError):
             motion_data.load_manifest(self.temporary)
+
+    def test_manifest_preserves_capture_driver_metadata(self):
+        frames = [{"frame_index": 0, "timestamp_usec": 0, "bodies": []}]
+        manifest = motion_data.create_manifest(
+            source={
+                "type": "azure-kinect",
+                "driver": "azure-kinect-recording",
+                "mode": "recording",
+            }
+        )
+        motion_data.write_session(self.temporary, frames, manifest=manifest)
+        loaded = motion_data.load_manifest(self.temporary)
+        self.assertEqual(loaded["source"]["driver"], "azure-kinect-recording")
+        self.assertEqual(loaded["source"]["mode"], "recording")
 
 
 class AnalysisIntegrationTests(unittest.TestCase):

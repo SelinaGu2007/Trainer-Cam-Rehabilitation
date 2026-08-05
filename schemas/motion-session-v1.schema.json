@@ -11,7 +11,13 @@
     "source": {
       "type": "object",
       "required": ["type"],
-      "properties": { "type": { "type": "string" } }
+      "properties": {
+        "type": { "type": "string" },
+        "driver": {
+          "enum": ["azure-kinect-live", "azure-kinect-recording"]
+        },
+        "mode": { "enum": ["live", "recording", "migration"] }
+      }
     },
     "coordinate_system": {
       "type": "object",

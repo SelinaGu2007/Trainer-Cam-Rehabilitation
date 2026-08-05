@@ -288,12 +288,18 @@ def load_session_track(
     return select_subject_track(load_session_frames(session_folder), config, body_id=body_id)
 
 
-def create_manifest(source_type: str = "legacy-output2") -> Dict[str, Any]:
+def create_manifest(
+    source_type: str = "legacy-output2",
+    source: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    source_metadata = dict(source) if source is not None else {"type": source_type}
+    if not str(source_metadata.get("type", "")).strip():
+        raise MotionDataError("Motion session source.type is required")
     return {
         "format": FORMAT_NAME,
         "schema_version": SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "source": {"type": source_type},
+        "source": source_metadata,
         "coordinate_system": {
             "unit": "millimeter",
             "x_axis": "sensor-right",

@@ -4,6 +4,8 @@
 
 The v1 format makes frame timing, coordinate units, body identity, joint confidence, and file relationships explicit. It is streamable during recording and remains readable without Azure Kinect SDK libraries.
 
+New recorder manifests identify `source.driver` as `azure-kinect-live` or `azure-kinect-recording` and identify the source `mode`. These fields are optional when reading earlier v1 sessions. Absolute input recording paths are deliberately not persisted.
+
 A session directory contains:
 
 ```text

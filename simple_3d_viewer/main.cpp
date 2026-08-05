@@ -4,10 +4,12 @@
 #include <array>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <vector>
-#include <k4arecord/playback.h>
 #include <k4a/k4a.h>
 #include <k4abt.h>
+
+#include "capture_source.h"
 
 #include <BodyTrackingHelpers.h>
 #include <Utilities.h>
@@ -48,9 +50,9 @@ void PrintUsage()
 {
     printf("\nOUTPUT_FOLDER is required as the first argument.\n");
 #ifdef _WIN32
-    printf("\nUSAGE: simple_3d_viewer.exe OUTPUT_FOLDER SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, DIRECTML, TENSORRT](optional) -model MODEL_PATH(optional)\n");
+    printf("\nUSAGE: simple_3d_viewer.exe OUTPUT_FOLDER [--source azure-kinect-live|azure-kinect-recording] [--input FILE.mkv] [--depth-mode NFOV_UNBINNED|WFOV_BINNED] [--processing-mode CPU|CUDA|DIRECTML|TENSORRT] [--model MODEL_PATH]\n");
 #else
-    printf("\nUSAGE: simple_3d_viewer.exe OUTPUT_FOLDER SensorMode[NFOV_UNBINNED, WFOV_BINNED](optional) RuntimeMode[CPU, CUDA, TENSORRT](optional)\n");
+    printf("\nUSAGE: simple_3d_viewer OUTPUT_FOLDER [--source azure-kinect-live|azure-kinect-recording] [--input FILE.mkv] [--depth-mode NFOV_UNBINNED|WFOV_BINNED] [--processing-mode CPU|CUDA|TENSORRT] [--model MODEL_PATH]\n");
 #endif
     printf("  - SensorMode: \n");
     printf("      NFOV_UNBINNED (default) - Narrow Field of View Unbinned Mode [Resolution: 640x576; FOI: 75 degree x 65 degree]\n");
@@ -62,11 +64,14 @@ void PrintUsage()
     printf("      DIRECTML - Use the DirectML processing mode.\n");
 #endif
     printf("      TENSORRT - Use the TensorRT processing mode.\n");
-    printf("      OFFLINE - Play a specified file. Does not require Kinect device\n");
+    printf("  - Capture source:\n");
+    printf("      azure-kinect-live      - Read from Azure Kinect device 0 (default)\n");
+    printf("      azure-kinect-recording - Read a recorded Azure Kinect MKV supplied with --input\n");
     printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 WFOV_BINNED CPU\n");
     printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 CPU\n");
     printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 WFOV_BINNED\n");
-    printf("e.g.   (k4abt_)simple_3d_viewer.exe C:\\recordings\\session1 OFFLINE MyFile.mkv\n");
+    printf("e.g.   simple_3d_viewer.exe C:\\recordings\\session1 --source azure-kinect-recording --input MyFile.mkv --processing-mode CPU\n");
+    printf("Legacy positional sensor/runtime arguments and OFFLINE MyFile.mkv remain supported.\n");
 }
 
 void PrintAppUsage()
@@ -128,10 +133,52 @@ struct InputSettings
 #else
     k4abt_tracker_processing_mode_t processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_CUDA;
 #endif
-    bool Offline = false;
-    std::string FileName;
+    std::string SourceDriver = "azure-kinect-live";
+    std::string InputPath;
     std::string ModelPath;
 };
+
+bool ApplyDepthMode(const std::string& value, InputSettings& settings)
+{
+    if (value == "NFOV_UNBINNED")
+    {
+        settings.DepthCameraMode = K4A_DEPTH_MODE_NFOV_UNBINNED;
+        return true;
+    }
+    if (value == "WFOV_BINNED")
+    {
+        settings.DepthCameraMode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+        return true;
+    }
+    return false;
+}
+
+bool ApplyProcessingMode(const std::string& value, InputSettings& settings)
+{
+    if (value == "CPU")
+    {
+        settings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_CPU;
+        return true;
+    }
+    if (value == "TENSORRT")
+    {
+        settings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_TENSORRT;
+        return true;
+    }
+    if (value == "CUDA")
+    {
+        settings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_CUDA;
+        return true;
+    }
+#ifdef _WIN32
+    if (value == "DIRECTML")
+    {
+        settings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_DIRECTML;
+        return true;
+    }
+#endif
+    return false;
+}
 
 bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettings)
 {
@@ -139,45 +186,60 @@ bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettin
     for (int i = 2; i < argc; i++)
     {
         std::string inputArg(argv[i]);
-        if (inputArg == std::string("NFOV_UNBINNED"))
+        if (inputArg == "--source")
         {
-            inputSettings.DepthCameraMode = K4A_DEPTH_MODE_NFOV_UNBINNED;
+            if (i >= argc - 1)
+            {
+                printf("Error: capture source missing\n");
+                return false;
+            }
+            inputSettings.SourceDriver = argv[++i];
         }
-        else if (inputArg == std::string("WFOV_BINNED"))
+        else if (inputArg == "--input")
         {
-            inputSettings.DepthCameraMode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+            if (i >= argc - 1)
+            {
+                printf("Error: input path missing\n");
+                return false;
+            }
+            inputSettings.InputPath = argv[++i];
         }
-        else if (inputArg == std::string("CPU"))
+        else if (inputArg == "--depth-mode")
         {
-            inputSettings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_CPU;
+            if (i >= argc - 1 || !ApplyDepthMode(argv[++i], inputSettings))
+            {
+                printf("Error: invalid depth mode\n");
+                return false;
+            }
         }
-        else if (inputArg == std::string("TENSORRT"))
+        else if (inputArg == "--processing-mode")
         {
-            inputSettings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_TENSORRT;
+            if (i >= argc - 1 || !ApplyProcessingMode(argv[++i], inputSettings))
+            {
+                printf("Error: invalid processing mode\n");
+                return false;
+            }
         }
-        else if (inputArg == std::string("CUDA"))
+        else if (ApplyDepthMode(inputArg, inputSettings))
         {
-            inputSettings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_CUDA;
+            // Legacy positional depth mode.
         }
-#ifdef _WIN32
-        else if (inputArg == std::string("DIRECTML"))
+        else if (ApplyProcessingMode(inputArg, inputSettings))
         {
-            inputSettings.processingMode = K4ABT_TRACKER_PROCESSING_MODE_GPU_DIRECTML;
+            // Legacy positional processing mode.
         }
-#endif
-        else if (inputArg == std::string("OFFLINE"))
+        else if (inputArg == "OFFLINE")
         {
-            inputSettings.Offline = true;
+            inputSettings.SourceDriver = "azure-kinect-recording";
             if (i < argc - 1) {
-                // Take the next argument after OFFLINE as file name
-                inputSettings.FileName = argv[i + 1];
+                inputSettings.InputPath = argv[i + 1];
                 i++;
             }
             else {
                 return false;
             }
         }
-        else if (inputArg == std::string("-model"))
+        else if (inputArg == "-model" || inputArg == "--model")
         {
             if (i < argc - 1)
                 inputSettings.ModelPath = argv[++i];
@@ -192,6 +254,17 @@ bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettin
             printf("Error: command not understood: %s\n", inputArg.c_str());
             return false;
         }
+    }
+    if (inputSettings.SourceDriver != "azure-kinect-live"
+        && inputSettings.SourceDriver != "azure-kinect-recording")
+    {
+        printf("Error: unsupported capture source: %s\n", inputSettings.SourceDriver.c_str());
+        return false;
+    }
+    if (inputSettings.SourceDriver == "azure-kinect-recording" && inputSettings.InputPath.empty())
+    {
+        printf("Error: azure-kinect-recording requires --input PATH\n");
+        return false;
     }
     return true;
 }
@@ -375,194 +448,104 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
 
 }
 
-void PlayFile(InputSettings inputSettings, std::ofstream& outputFile, std::ofstream& motionFramesFile,
-    const std::string& Imagefile)
+bool TrackSource(CaptureSource& source, const InputSettings& inputSettings,
+    std::ofstream& outputFile, std::ofstream& motionFramesFile, const std::string& imageFolder)
 {
-    // Initialize the 3d window controller
-    Window3dWrapper window3d;
-
-    //create the tracker and playback handle
-    k4a_calibration_t sensorCalibration;
-    k4abt_tracker_t tracker = nullptr;
-    k4a_playback_t playbackHandle = nullptr;
-
-    const char* file = inputSettings.FileName.c_str();
-    if (k4a_playback_open(file, &playbackHandle) != K4A_RESULT_SUCCEEDED)
+    k4a_calibration_t sensorCalibration{};
+    std::string sourceError;
+    if (!source.Open(sensorCalibration, sourceError))
     {
-        printf("Failed to open recording: %s\n", file);
-        return;
+        std::cerr << sourceError << std::endl;
+        return false;
     }
-
-    if (k4a_playback_get_calibration(playbackHandle, &sensorCalibration) != K4A_RESULT_SUCCEEDED)
-    {
-        printf("Failed to get calibration\n");
-        return;
-    }
-
-    k4a_capture_t capture = nullptr;
-    k4a_stream_result_t playbackResult = K4A_STREAM_RESULT_SUCCEEDED;
 
     k4abt_tracker_configuration_t trackerConfig = K4ABT_TRACKER_CONFIG_DEFAULT;
     trackerConfig.processing_mode = inputSettings.processingMode;
-    trackerConfig.model_path = inputSettings.ModelPath.c_str();
-    VERIFY(k4abt_tracker_create(&sensorCalibration, trackerConfig, &tracker), "Body tracker initialization failed!");
-
-    int depthWidth = sensorCalibration.depth_camera_calibration.resolution_width;
-    int depthHeight = sensorCalibration.depth_camera_calibration.resolution_height;
-
-    window3d.Create("3D Visualization", sensorCalibration);
-    window3d.SetCloseCallback(CloseCallback);
-    window3d.SetKeyCallback(ProcessKey);
-
-    int idx = 0;
-    while (playbackResult == K4A_STREAM_RESULT_SUCCEEDED && s_isRunning)
+    trackerConfig.model_path = inputSettings.ModelPath.empty() ? nullptr : inputSettings.ModelPath.c_str();
+    k4abt_tracker_t tracker = nullptr;
+    if (k4abt_tracker_create(&sensorCalibration, trackerConfig, &tracker) != K4A_RESULT_SUCCEEDED)
     {
-        playbackResult = k4a_playback_get_next_capture(playbackHandle, &capture);
-        if (playbackResult == K4A_STREAM_RESULT_EOF)
-        {
-            // End of file reached
-            break;
-        }
-
-        if (playbackResult == K4A_STREAM_RESULT_SUCCEEDED)
-        {
-            // check to make sure we have a depth image
-            k4a_image_t depthImage = k4a_capture_get_depth_image(capture);
-            if (depthImage == nullptr) {
-                //If no depth image, print a warning and skip to next frame
-                std::cout << "Warning: No depth image, skipping frame!" << std::endl;
-                k4a_capture_release(capture);
-                continue;
-            }
-            // Release the Depth image
-            k4a_image_release(depthImage);
-
-            //enque capture and pop results - synchronous
-            k4a_wait_result_t queueCaptureResult = k4abt_tracker_enqueue_capture(tracker, capture, K4A_WAIT_INFINITE);
-            k4a_capture_release(capture);
-            capture = nullptr;
-
-            if (queueCaptureResult == K4A_WAIT_RESULT_FAILED)
-            {
-                std::cout << "Error! Add capture to tracker process queue failed!" << std::endl;
-                break;
-            }
-
-            k4abt_frame_t bodyFrame = nullptr;
-            k4a_wait_result_t popFrameResult = k4abt_tracker_pop_result(tracker, &bodyFrame, K4A_WAIT_INFINITE);
-            if (popFrameResult == K4A_WAIT_RESULT_SUCCEEDED)
-            {
-                /************* Successfully get a body tracking result, process the result here ***************/
-                VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile, motionFramesFile, idx, Imagefile);
-                ++idx;
-                //Release the bodyFrame
-                k4abt_frame_release(bodyFrame);
-            }
-            else
-            {
-                std::cout << "Pop body frame result failed!" << std::endl;
-                break;
-            }
-        }
-
-        window3d.SetLayout3d(s_layoutMode);
-        window3d.SetJointFrameVisualization(s_visualizeJointFrame);
-        window3d.Render();
+        std::cerr << "Body tracker initialization failed" << std::endl;
+        source.Close();
+        return false;
     }
 
-    k4abt_tracker_shutdown(tracker);
-    k4abt_tracker_destroy(tracker);
-    window3d.Delete();
-    printf("Finished body tracking processing!\n");
-    k4a_playback_close(playbackHandle);
-}
-
-void PlayFromDevice(InputSettings inputSettings, std::ofstream& outputFile, std::ofstream& motionFramesFile,
-    const std::string& Imagefile)
-{
-    k4a_device_t device = nullptr;
-    VERIFY(k4a_device_open(0, &device), "Open K4A Device failed!");
-
-    // Start camera. Make sure depth camera is enabled.
-    k4a_device_configuration_t deviceConfig = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
-    deviceConfig.depth_mode = inputSettings.DepthCameraMode;
-    deviceConfig.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32; // add new
-    deviceConfig.color_resolution = K4A_COLOR_RESOLUTION_720P; // add new
-    VERIFY(k4a_device_start_cameras(device, &deviceConfig), "Start K4A cameras failed!");
-
-    // Get calibration information
-    k4a_calibration_t sensorCalibration;
-    VERIFY(k4a_device_get_calibration(device, deviceConfig.depth_mode, deviceConfig.color_resolution, &sensorCalibration),
-        "Get depth camera calibration failed!");
-    int depthWidth = sensorCalibration.depth_camera_calibration.resolution_width;
-    int depthHeight = sensorCalibration.depth_camera_calibration.resolution_height;
-
-    // Create Body Tracker
-    k4abt_tracker_t tracker = nullptr;
-    k4abt_tracker_configuration_t trackerConfig = K4ABT_TRACKER_CONFIG_DEFAULT;
-    trackerConfig.processing_mode = inputSettings.processingMode;
-    trackerConfig.model_path = inputSettings.ModelPath.c_str();
-    VERIFY(k4abt_tracker_create(&sensorCalibration, trackerConfig, &tracker), "Body tracker initialization failed!");
-
-    // Initialize the 3d window controller
     Window3dWrapper window3d;
     window3d.Create("3D Visualization", sensorCalibration);
     window3d.SetCloseCallback(CloseCallback);
     window3d.SetKeyCallback(ProcessKey);
-    
-    int idx = 0;  // add index
+
+    const int depthWidth = sensorCalibration.depth_camera_calibration.resolution_width;
+    const int depthHeight = sensorCalibration.depth_camera_calibration.resolution_height;
+    const int waitTimeout = source.IsRealtime() ? 0 : K4A_WAIT_INFINITE;
+    int frameIndex = 0;
+    bool succeeded = true;
 
     while (s_isRunning)
     {
-        k4a_capture_t sensorCapture = nullptr;
-        k4a_wait_result_t getCaptureResult = k4a_device_get_capture(device, &sensorCapture, 0); // timeout_in_ms is set to 0
-
-        if (getCaptureResult == K4A_WAIT_RESULT_SUCCEEDED)
+        k4a_capture_t capture = nullptr;
+        const CaptureReadStatus readStatus = source.ReadCapture(&capture, waitTimeout);
+        if (readStatus == CaptureReadStatus::EndOfStream)
         {
-            // timeout_in_ms is set to 0. Return immediately no matter whether the sensorCapture is successfully added
-            // to the queue or not.
-            k4a_wait_result_t queueCaptureResult = k4abt_tracker_enqueue_capture(tracker, sensorCapture, 0);
-            k4a_capture_release(sensorCapture);
-            sensorCapture = nullptr;
-
-            if (queueCaptureResult == K4A_WAIT_RESULT_FAILED)
-            {
-                std::cout << "Error! Add capture to tracker process queue failed!" << std::endl;
-                break;
-            }
+            break;
         }
-        else if (getCaptureResult != K4A_WAIT_RESULT_TIMEOUT)
+        if (readStatus == CaptureReadStatus::Failed)
         {
-            std::cout << "Get depth capture returned error: " << getCaptureResult << std::endl;
+            std::cerr << "Capture source failed while reading from " << source.DriverName() << std::endl;
+            succeeded = false;
             break;
         }
 
-        // Pop Result from Body Tracker
-        k4abt_frame_t bodyFrame = nullptr;
-        k4a_wait_result_t popFrameResult = k4abt_tracker_pop_result(tracker, &bodyFrame, 0); // timeout_in_ms is set to 0
-        if (popFrameResult == K4A_WAIT_RESULT_SUCCEEDED)
+        if (readStatus == CaptureReadStatus::Success)
         {
-            /************* Successfully get a body tracking result, process the result here ***************/
-            VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight, outputFile, motionFramesFile, idx, Imagefile);
-            idx++;
-            //Release the bodyFrame
+            k4a_image_t depthImage = k4a_capture_get_depth_image(capture);
+            if (depthImage == nullptr)
+            {
+                std::cerr << "Warning: capture has no depth image; frame skipped" << std::endl;
+                k4a_capture_release(capture);
+            }
+            else
+            {
+                k4a_image_release(depthImage);
+                const k4a_wait_result_t queueResult =
+                    k4abt_tracker_enqueue_capture(tracker, capture, waitTimeout);
+                k4a_capture_release(capture);
+                if (queueResult == K4A_WAIT_RESULT_FAILED)
+                {
+                    std::cerr << "Unable to enqueue capture for body tracking" << std::endl;
+                    succeeded = false;
+                    break;
+                }
+            }
+        }
+
+        k4abt_frame_t bodyFrame = nullptr;
+        const k4a_wait_result_t popResult = k4abt_tracker_pop_result(tracker, &bodyFrame, waitTimeout);
+        if (popResult == K4A_WAIT_RESULT_SUCCEEDED)
+        {
+            VisualizeResult(bodyFrame, window3d, depthWidth, depthHeight,
+                outputFile, motionFramesFile, frameIndex, imageFolder);
+            ++frameIndex;
             k4abt_frame_release(bodyFrame);
         }
-        
+        else if (popResult == K4A_WAIT_RESULT_FAILED)
+        {
+            std::cerr << "Unable to read body-tracking result" << std::endl;
+            succeeded = false;
+            break;
+        }
 
         window3d.SetLayout3d(s_layoutMode);
         window3d.SetJointFrameVisualization(s_visualizeJointFrame);
         window3d.Render();
     }
 
-    std::cout << "Finished body tracking processing!" << std::endl;
-
     window3d.Delete();
     k4abt_tracker_shutdown(tracker);
     k4abt_tracker_destroy(tracker);
-
-    k4a_device_stop_cameras(device);
-    k4a_device_close(device);
+    source.Close();
+    std::cout << "Finished body tracking from " << source.DriverName() << std::endl;
+    return succeeded;
 }
 
 int main(int argc, char** argv)
@@ -622,6 +605,19 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    std::string sourceError;
+    std::unique_ptr<CaptureSource> captureSource = CreateCaptureSource(
+        inputSettings.SourceDriver,
+        inputSettings.InputPath,
+        inputSettings.DepthCameraMode,
+        sourceError);
+    if (!captureSource)
+    {
+        std::cerr << sourceError << std::endl;
+        sessionLog << "invalid_capture_source driver=" << inputSettings.SourceDriver << std::endl;
+        return 9;
+    }
+
     std::ofstream manifestFile(basePath + "\\session.json");
     if (!manifestFile.is_open())
     {
@@ -633,8 +629,9 @@ int main(int argc, char** argv)
         << "  \"format\": \"trainercam.motion-session\",\n"
         << "  \"schema_version\": 1,\n"
         << "  \"created_at\": \"" << std::put_time(&startedUtcTime, "%Y-%m-%dT%H:%M:%SZ") << "\",\n"
-        << "  \"source\": { \"type\": \"azure-kinect\", \"mode\": \""
-        << (inputSettings.Offline ? "recording" : "live") << "\" },\n"
+        << "  \"source\": { \"type\": \"azure-kinect\", \"driver\": \""
+        << captureSource->DriverName() << "\", \"mode\": \""
+        << (captureSource->IsRealtime() ? "live" : "recording") << "\" },\n"
         << "  \"coordinate_system\": { \"unit\": \"millimeter\", \"x_axis\": \"sensor-right\", "
         << "\"y_axis\": \"sensor-down\", \"z_axis\": \"sensor-forward\", \"orientation_order\": \"wxyz\" },\n"
         << "  \"skeleton\": { \"model\": \"azure-kinect-body-tracking\", \"joint_count\": 32 },\n"
@@ -643,14 +640,10 @@ int main(int argc, char** argv)
         << "}\n";
     manifestFile.close();
 
-    // Either play the offline file or play from the device
-    if (inputSettings.Offline == true)
+    if (!TrackSource(*captureSource, inputSettings, outputFile, motionFramesFile, ImagefileFloder))
     {
-        PlayFile(inputSettings, outputFile, motionFramesFile, ImagefileFloder);
-    }
-    else
-    {
-        PlayFromDevice(inputSettings, outputFile, motionFramesFile, ImagefileFloder);
+        sessionLog << "capture_failed driver=" << captureSource->DriverName() << std::endl;
+        return 10;
     }
     outputFile.close();
     motionFramesFile.close();

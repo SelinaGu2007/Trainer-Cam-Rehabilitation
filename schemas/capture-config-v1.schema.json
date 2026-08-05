@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/capture-config-v1.schema.json",
+  "title": "TrainerCam capture source configuration",
+  "type": "object",
+  "required": ["driver", "depth_mode", "processing_mode"],
+  "properties": {
+    "driver": {
+      "enum": ["azure-kinect-live", "azure-kinect-recording"]
+    },
+    "depth_mode": {
+      "enum": ["NFOV_UNBINNED", "WFOV_BINNED"]
+    },
+    "processing_mode": {
+      "enum": ["CPU", "CUDA", "DIRECTML", "TENSORRT"]
+    },
+    "model_path": { "type": "string" },
+    "recording_path": { "type": "string" }
+  },
+  "additionalProperties": false
+}

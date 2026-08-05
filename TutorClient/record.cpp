@@ -1,6 +1,7 @@
 #include "record.h"
 #include "ui_record.h"
 #include "appconfig.h"
+#include <exception>
 #pragma comment(lib,"user32")
 Record::Record(QWidget *parent) :
     QWidget(parent),
@@ -72,8 +73,27 @@ void Record::on_pushButtonRecord_clicked()
          dir.mkpath(".");
      }
       QString program = RecorderProgram;
+      const AppConfig &config = AppConfig::instance();
+      QString recordingInput = config.captureRecordingPath;
+      if (config.captureUsesRecording() && recordingInput.isEmpty()) {
+          recordingInput = QFileDialog::getOpenFileName(
+              this,
+              "Select Azure Kinect recording",
+              QString(),
+              "Azure Kinect recordings (*.mkv);;All files (*)");
+          if (recordingInput.isEmpty()) {
+              return;
+          }
+      }
+      QStringList recorderArguments;
+      try {
+          recorderArguments = config.recorderArguments(directorypath, recordingInput);
+      } catch (const std::exception &error) {
+          QMessageBox::critical(this, "Capture source", error.what());
+          return;
+      }
       QProcess *process = new QProcess(this);
-      process->start(program, QStringList() << directorypath);
+      process->start(program, recorderArguments);
       moveWindowToMiddle(L"Color_Image",directorypath+"\\flag.txt");
       displayListDirectories(TutorFolder);
 

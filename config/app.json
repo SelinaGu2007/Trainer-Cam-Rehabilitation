@@ -15,6 +15,13 @@
     "host": "127.0.0.1",
     "port": 6547
   },
+  "capture": {
+    "driver": "azure-kinect-live",
+    "depth_mode": "NFOV_UNBINNED",
+    "processing_mode": "DIRECTML",
+    "model_path": "",
+    "recording_path": ""
+  },
   "feedback": {
     "locale": "en-US",
     "voice_enabled": true,

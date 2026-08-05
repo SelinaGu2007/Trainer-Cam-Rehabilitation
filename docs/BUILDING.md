@@ -43,6 +43,8 @@ Both Qt clients read `config/app.json`. Relative paths are resolved from `projec
 
 The `feedback` section selects the post-session summary locale and default voice state, rate and volume. CustomerClient uses Qt TextToSpeech and requires a compatible operating-system speech engine. The visual result remains available when speech is unavailable.
 
+The `capture` section selects `azure-kinect-live` or `azure-kinect-recording`, depth mode, body-tracker processing mode and an optional model path. A recording driver with no configured `recording_path` opens an MKV file chooser in either Qt client. See `docs/MODULAR_CAPTURE.md` for the driver contract and compatibility defaults.
+
 Set `TRAINER_CAM_CONFIG` to use another configuration file:
 
 ```powershell
@@ -90,6 +92,17 @@ The recorder now requires an output directory as its first argument and creates 
 ```powershell
 .\simple_3d_viewer\build\bin\Release\simple_3d_viewer.exe ".\data\runtime\tutor\arm_raise"
 ```
+
+The equivalent explicit live-source invocation is:
+
+```powershell
+.\simple_3d_viewer\build\bin\Release\simple_3d_viewer.exe `
+  ".\data\runtime\tutor\arm_raise" `
+  --source azure-kinect-live `
+  --processing-mode DIRECTML
+```
+
+An Azure Kinect MKV can be processed without a connected device by selecting `--source azure-kinect-recording --input FILE.mkv`.
 
 Each recording writes the versioned `session.json` and `frames.jsonl` files as well as the transitional `output2.txt` export. See `docs/MOTION_DATA_FORMAT.md` for the schema and legacy migration command.
 

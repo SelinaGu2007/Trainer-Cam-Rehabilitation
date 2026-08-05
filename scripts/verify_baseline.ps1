@@ -28,6 +28,7 @@ try {
     }
     $null = Get-Content -Raw -Encoding UTF8 "schemas\motion-session-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\motion-frame-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\capture-config-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\exercise-profile-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\assessment-report-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\subject-tracking-config-v1.schema.json" | ConvertFrom-Json
@@ -68,6 +69,8 @@ try {
     }
 
     $MissingHelpers = @(
+        "simple_3d_viewer\capture_source.h",
+        "simple_3d_viewer\capture_source.cpp",
         "sample_helper_includes\BodyTrackingHelpers.h",
         "sample_helper_includes\Utilities.h",
         "sample_helper_libs\window_controller_3d\Window3dWrapper.h",
