@@ -101,6 +101,10 @@ AppConfig AppConfig::load()
     result.exerciseProfile = resolvePath(
         projectRoot,
         configuredProfile.isEmpty() ? "config/exercises/arm_raise.json" : configuredProfile);
+    const QString configuredTracking = paths.value("subject_tracking").toString().trimmed();
+    result.subjectTrackingConfig = resolvePath(
+        projectRoot,
+        configuredTracking.isEmpty() ? "config/subject_tracking.json" : configuredTracking);
 
     const QJsonObject network = rootObject.value("network").toObject();
     result.host = requiredString(network, "host");

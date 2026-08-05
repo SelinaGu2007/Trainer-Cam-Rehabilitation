@@ -14,6 +14,7 @@ Analyse::Analyse(QWidget *parent) :
     MyRecordingFolder = config.customerRecordingsDir;
     AnalyzerProgram = config.analyzerProgram;
     ExerciseProfile = config.exerciseProfile;
+    SubjectTrackingConfig = config.subjectTrackingConfig;
 }
 
 Analyse::~Analyse()
@@ -85,12 +86,31 @@ void Analyse::on_pushButtonAnalyse_clicked()
     arguments << "--folder_tutor" << dir1
               << "--folder_customer" << dir2
               << "--profile" << ExerciseProfile
+              << "--tracking-config" << SubjectTrackingConfig
               << "--report-output" << QDir(folder_customer).filePath("assessment.json")
               << "--function" << "showVideos";
 
 
 
     QProcess *process = new QProcess(this);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(process, &QProcess::errorOccurred, this, [this, program](QProcess::ProcessError error) {
+        QMessageBox::critical(
+            this, "Analysis Error",
+            QString("Unable to start the motion analyzer: %1\nError code: %2")
+                .arg(program).arg(static_cast<int>(error)));
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+            const QString details = QString::fromUtf8(process->readAllStandardError()).trimmed();
+            QMessageBox::warning(
+                this, "Session Quality Check",
+                "Motion analysis stopped because the recording did not pass its quality checks."
+                + (details.isEmpty() ? QString() : "\n\n" + details));
+        }
+        process->deleteLater();
+    });
     process->start(program, arguments);
 
     moveWindowAnalyse(L"Ananlse_outcome",dir2+"//analyse");

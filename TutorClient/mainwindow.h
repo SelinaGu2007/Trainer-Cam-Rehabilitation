@@ -8,6 +8,7 @@
 #include <QProcessEnvironment>
 #include <QListWidgetItem>
 #include <QShowEvent>
+#include <QMessageBox>
 #include "record.h"
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -49,6 +50,7 @@ private:
     QString VideoPlayerProgram;
     QString AnalyzerProgram;
     QString ExerciseProfile;
+    QString SubjectTrackingConfig;
     quint16 ServerPort = 6547;
 
 protected:

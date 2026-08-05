@@ -2,7 +2,7 @@
 
 TrainerCam is a rehabilitation exercise coaching prototype that records human motion with Azure Kinect, extracts 3D skeleton joints, compares a user's movement with a tutor demonstration, and visualizes motion differences.
 
-> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, confidence-aware preprocessing, configurable offline DTW assessment, and structured scoring reports. Persistent subject tracking, real-time corrective feedback, clinically calibrated profiles, and voice feedback are planned work rather than completed capabilities.
+> **Current implementation scope:** this repository provides Azure Kinect recording, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, configurable offline DTW assessment, and structured scoring reports. Real-time corrective feedback, clinically calibrated profiles, and voice feedback are planned work rather than completed capabilities.
 
 ![Motion analysis visualization](docs/motion_analysis.png)
 
@@ -41,12 +41,13 @@ The motion-comparison pipeline consists of the following steps:
 
 1. Capture RGB frames and 3D body-joint coordinates using Azure Kinect Body Tracking.
 2. Extract angle-based motion features from selected body joints.
-3. Repair short low-confidence gaps and reject unusable frames.
-4. Normalize the skeleton by body origin, scale, and torso orientation.
-5. Smooth motion trajectories using a Gaussian filter.
-6. Align tutor and user sequences with Dynamic Time Warping.
-7. Compute distances between aligned frames.
-8. Produce either a quality report, aggregate score, or frame-level visualization.
+3. Lock one subject inside the configured training region and reject unstable sessions.
+4. Repair short low-confidence gaps and reject unusable frames.
+5. Normalize the skeleton by body origin, scale, and torso orientation.
+6. Smooth motion trajectories using a Gaussian filter.
+7. Align tutor and user sequences with Dynamic Time Warping.
+8. Compute distances between aligned frames.
+9. Produce either a quality report, aggregate score, or frame-level visualization.
 
 Dynamic Time Warping allows exercises performed at different speeds to be compared by aligning corresponding stages of the motion.
 
@@ -111,6 +112,7 @@ It:
 
 Supported modes:
 
+- `--function tracking`: reports locked body IDs, training-region coverage and session-gate results;
 - `--function quality`: reports joint coverage, interpolation and usable frames;
 - `--function report`: prints a structured overall and per-feature assessment;
 - `--function score`: prints an aggregate motion-comparison score;
@@ -188,6 +190,8 @@ The generated visualization frames are saved under:
 ```
 
 The confidence handling, missing-joint repair, body normalisation and quality gates are documented in [docs/MOTION_PREPROCESSING.md](docs/MOTION_PREPROCESSING.md).
+
+Persistent body-ID locking, the configurable training region, multi-person diagnostics, and pre-score session gates are documented in [docs/SUBJECT_TRACKING.md](docs/SUBJECT_TRACKING.md).
 
 Exercise-specific features, weights, tolerances, feedback, and the assessment report are documented in [docs/SCORING_AND_PROFILES.md](docs/SCORING_AND_PROFILES.md). The default engineering profile is `config/exercises/arm_raise.json`.
 

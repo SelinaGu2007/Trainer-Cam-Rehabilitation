@@ -37,6 +37,8 @@ Both Qt clients read `config/app.json`. Relative paths are resolved from `projec
 
 `paths.exercise_profile` selects the default exercise profile passed to the analyzer. Existing local configuration files that omit it fall back to `config/exercises/arm_raise.json`.
 
+`paths.subject_tracking` selects the training-region and subject-locking configuration passed to the analyzer. Existing local configuration files that omit it fall back to `config/subject_tracking.json`.
+
 Set `TRAINER_CAM_CONFIG` to use another configuration file:
 
 ```powershell

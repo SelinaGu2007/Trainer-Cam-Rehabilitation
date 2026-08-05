@@ -11,8 +11,9 @@ from typing import List, Tuple, Dict, Any
 
 from assessment import create_assessment_report, score_errors, weighted_sequence
 from exercise_profile import load_profile
-from motion_data import load_legacy_frames, load_session_bodies
+from motion_data import load_legacy_frames, load_session_bodies, load_session_track
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
+from subject_tracking import load_tracking_config
 
 try:
     import cv2
@@ -245,8 +246,11 @@ def getargs(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='two folder', add_help=True)
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
-    parser.add_argument("--function", default='NULL', help='select from quality,report,showVideos,score,showMaxDiffetence')
+    parser.add_argument("--function", default='NULL', help='select from tracking,quality,report,showVideos,score,showMaxDiffetence')
     parser.add_argument("--profile", default=None, help='exercise profile id or JSON path')
+    parser.add_argument("--tracking-config", default=None, help='subject tracking JSON path')
+    parser.add_argument("--tutor-body-id", type=int, default=None, help='explicit tutor body ID')
+    parser.add_argument("--customer-body-id", type=int, default=None, help='explicit customer body ID')
     parser.add_argument("--report-output", default=None, help='optional assessment JSON output path')
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--min-confidence", type=int, default=1, choices=range(4))
@@ -276,7 +280,9 @@ def main():
     if not 0.0 < args.min_frame_joint_fraction <= 1.0:
         raise ValueError("--min-frame-joint-fraction must be in (0, 1]")
     profile = load_profile(args.profile)
+    tracking_config = load_tracking_config(args.tracking_config)
     LOGGER.info("Using exercise profile id=%s source=%s", profile.profile_id, profile.source_path)
+    LOGGER.info("Using subject tracking config source=%s", tracking_config.source_path)
 
     analyse_folder = os.path.join(folder_customer, "analyse")
     cached_report_ready = not args.report_output or Path(args.report_output).is_file()
@@ -287,8 +293,22 @@ def main():
         showvideo(analyse_folder)
         return 0
 
-    raw_bodies_A = load_session_bodies(folder_tutor)
-    raw_bodies_B = load_session_bodies(folder_customer)
+    raw_bodies_A, tracking_A = load_session_track(
+        folder_tutor, body_id=args.tutor_body_id, tracking_config=tracking_config
+    )
+    raw_bodies_B, tracking_B = load_session_track(
+        folder_customer, body_id=args.customer_body_id, tracking_config=tracking_config
+    )
+    if function == "tracking":
+        print(json.dumps({"tutor": tracking_A, "customer": tracking_B}, indent=2))
+        return 0
+    for role, tracking in (("tutor", tracking_A), ("customer", tracking_B)):
+        LOGGER.info("%s subject tracking: %s", role.capitalize(), tracking)
+        if not tracking["gate_passed"]:
+            raise ValueError(
+                f"{role} session failed subject tracking gates: "
+                + "; ".join(tracking["gate_failures"])
+            )
     if not raw_bodies_A or not raw_bodies_B:
         raise ValueError("Both recordings must contain at least one valid body frame")
     required_joints = profile.required_joints
@@ -306,6 +326,8 @@ def main():
     )
     quality_A = prepared_A.quality_summary(required_joints)
     quality_B = prepared_B.quality_summary(required_joints)
+    quality_A["subject_tracking"] = tracking_A
+    quality_B["subject_tracking"] = tracking_B
     LOGGER.info("Tutor motion quality: %s", quality_A)
     LOGGER.info("Customer motion quality: %s", quality_B)
     for role, quality in (("tutor", quality_A), ("customer", quality_B)):
@@ -408,7 +430,7 @@ def main():
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: quality, report, score, showVideos, showMaxDiffetence")
+        raise ValueError("Unknown --function. Use: tracking, quality, report, score, showVideos, showMaxDiffetence")
 
     return 0
 

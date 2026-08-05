@@ -10,6 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from subject_tracking import (
+    SubjectTrackingConfig,
+    load_tracking_config,
+    select_subject_track,
+)
+
 
 FORMAT_NAME = "trainercam.motion-session"
 SCHEMA_VERSION = 1
@@ -262,9 +268,24 @@ def select_primary_bodies(
 
 
 def load_session_bodies(
-    session_folder: str | Path, body_id: Optional[int] = None
+    session_folder: str | Path,
+    body_id: Optional[int] = None,
+    tracking_config: SubjectTrackingConfig | None = None,
 ) -> List[Dict[str, Any]]:
-    return select_primary_bodies(load_session_frames(session_folder), body_id=body_id)
+    bodies, _ = load_session_track(
+        session_folder, body_id=body_id, tracking_config=tracking_config
+    )
+    return bodies
+
+
+def load_session_track(
+    session_folder: str | Path,
+    body_id: Optional[int] = None,
+    tracking_config: SubjectTrackingConfig | None = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Load one locked subject and return its session-gating diagnostics."""
+    config = tracking_config or load_tracking_config()
+    return select_subject_track(load_session_frames(session_folder), config, body_id=body_id)
 
 
 def create_manifest(source_type: str = "legacy-output2") -> Dict[str, Any]:

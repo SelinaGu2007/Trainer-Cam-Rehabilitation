@@ -23,7 +23,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("paths", config)
         self.assertIn("network", config)
         self.assertGreater(config["network"]["port"], 0)
-        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile"):
+        for key in ("tutor_recordings", "customer_recordings", "logs", "recorder", "video_player", "analyzer", "exercise_profile", "subject_tracking"):
             self.assertTrue(config["paths"][key])
 
 
@@ -108,7 +108,7 @@ Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidenc
     def test_round_trip_and_stable_primary_body_selection(self):
         joint = {
             "joint_index": 0,
-            "position_mm": [1.0, 2.0, 3.0],
+            "position_mm": [1.0, 2.0, 1800.0],
             "orientation_wxyz": [1.0, 0.0, 0.0, 0.0],
             "confidence_level": 2,
         }
@@ -145,6 +145,24 @@ Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidenc
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
+    def test_public_samples_pass_subject_tracking_gates(self):
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "tutor_session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--function",
+            "tracking",
+        ]
+        completed = subprocess.run(command, check=True, capture_output=True, text=True)
+        report = json.loads(completed.stdout)
+        self.assertTrue(report["tutor"]["gate_passed"])
+        self.assertTrue(report["customer"]["gate_passed"])
+        self.assertEqual(report["tutor"]["selected_body_id"], 1)
+        self.assertEqual(report["customer"]["selected_body_id"], 7)
+
     def test_public_samples_produce_a_numeric_score(self):
         command = [
             sys.executable,
@@ -203,6 +221,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
             self.assertEqual(report["format"], "trainercam.assessment-report")
             self.assertEqual(report["profile"]["id"], "arm_raise")
             self.assertEqual(len(report["feature_scores"]), 9)
+            self.assertTrue(report["quality"]["tutor"]["subject_tracking"]["gate_passed"])
+            self.assertTrue(report["quality"]["customer"]["subject_tracking"]["gate_passed"])
             self.assertEqual(saved_report["overall_score"], report["overall_score"])
             self.assertGreaterEqual(report["overall_score"], 0.0)
             self.assertLessEqual(report["overall_score"], 100.0)

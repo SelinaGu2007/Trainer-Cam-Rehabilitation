@@ -68,7 +68,7 @@ The normative JSON Schemas are stored in `schemas/motion-session-v1.schema.json`
 
 ## Body selection
 
-The storage format preserves all detected bodies. The current analysis compatibility layer selects one stable track by choosing the `body_id` present in the greatest number of frames, using aggregate joint confidence as a tie-breaker. This prevents nearby people from being flattened into the exercise timeline and leaves room for explicit subject locking in a later phase.
+The storage format preserves all detected bodies. During analysis, TrainerCam locks one `body_id` from the initial configured time window and training region, then retains that ID for the full recording. It does not switch to a later bystander. Tracking coverage, region membership, target loss, position jumps and multi-person warnings are reported before scoring; see [SUBJECT_TRACKING.md](SUBJECT_TRACKING.md).
 
 ## Backward compatibility and migration
 

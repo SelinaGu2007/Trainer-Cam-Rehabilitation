@@ -30,7 +30,9 @@ try {
     $null = Get-Content -Raw -Encoding UTF8 "schemas\motion-frame-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\exercise-profile-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\assessment-report-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\subject-tracking-config-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\exercises\arm_raise.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "config\subject_tracking.json" | ConvertFrom-Json
 
     Write-Host "Compiling Python sources..."
     Invoke-Checked {
@@ -38,6 +40,7 @@ try {
             "test_exe\main.py" `
             "test_exe\assessment.py" `
             "test_exe\exercise_profile.py" `
+            "test_exe\subject_tracking.py" `
             "test_exe\motion_data.py" `
             "test_exe\motion_preprocessing.py" `
             "test_exe\DTW.py" `

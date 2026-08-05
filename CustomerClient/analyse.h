@@ -33,6 +33,7 @@ private:
     QString MyRecordingFolder;
     QString AnalyzerProgram;
     QString ExerciseProfile;
+    QString SubjectTrackingConfig;
 
 protected:
     void showEvent(QShowEvent *event) override;

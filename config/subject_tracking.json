@@ -1,0 +1,19 @@
+{
+  "format": "trainercam.subject-tracking-config",
+  "schema_version": 1,
+  "selection": {
+    "anchor_joint": 0,
+    "lock_window_frames": 30,
+    "min_anchor_confidence": 1
+  },
+  "region_of_interest_mm": {
+    "x": [-900, 900],
+    "z": [700, 4000]
+  },
+  "session_gates": {
+    "min_track_coverage": 0.8,
+    "min_in_roi_fraction": 0.9,
+    "max_consecutive_missing_frames": 30,
+    "max_anchor_jump_mm": 800
+  }
+}

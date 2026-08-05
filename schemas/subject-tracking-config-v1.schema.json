@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/subject-tracking-config-v1.schema.json",
+  "title": "TrainerCam subject tracking configuration",
+  "type": "object",
+  "required": ["format", "schema_version", "selection", "region_of_interest_mm", "session_gates"],
+  "properties": {
+    "format": { "const": "trainercam.subject-tracking-config" },
+    "schema_version": { "const": 1 },
+    "selection": {
+      "type": "object",
+      "required": ["anchor_joint", "lock_window_frames", "min_anchor_confidence"],
+      "properties": {
+        "anchor_joint": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "lock_window_frames": { "type": "integer", "minimum": 1 },
+        "min_anchor_confidence": { "type": "integer", "minimum": 0, "maximum": 3 }
+      }
+    },
+    "region_of_interest_mm": {
+      "type": "object",
+      "required": ["x", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/range" },
+        "z": { "$ref": "#/$defs/range" }
+      }
+    },
+    "session_gates": {
+      "type": "object",
+      "required": ["min_track_coverage", "min_in_roi_fraction", "max_consecutive_missing_frames", "max_anchor_jump_mm"],
+      "properties": {
+        "min_track_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "min_in_roi_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_consecutive_missing_frames": { "type": "integer", "minimum": 0 },
+        "max_anchor_jump_mm": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}
