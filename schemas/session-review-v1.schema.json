@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/session-review-v1.schema.json",
+  "title": "TrainerCam post-session review timeline",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "profile", "item_count", "worst_segment", "items", "disclaimer"],
+  "properties": {
+    "format": { "const": "trainercam.session-review" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "profile": {
+      "type": "object",
+      "required": ["id", "display_name"]
+    },
+    "item_count": { "type": "integer", "minimum": 1 },
+    "worst_segment": {
+      "type": "object",
+      "required": ["start_index", "end_index", "focus_index", "mean_error_deg"]
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["alignment_index", "customer", "tutor", "difference_deg", "issue"],
+        "properties": {
+          "alignment_index": { "type": "integer", "minimum": 0 },
+          "difference_deg": { "type": "number", "minimum": 0 },
+          "in_worst_segment": { "type": "boolean" },
+          "customer": { "$ref": "#/$defs/frame" },
+          "tutor": { "$ref": "#/$defs/frame" },
+          "issue": {
+            "type": "object",
+            "required": ["feature_id", "label", "joints", "error_deg", "severity", "message"],
+            "properties": {
+              "joints": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": { "type": "integer", "minimum": 0, "maximum": 31 }
+              },
+              "error_deg": { "type": "number", "minimum": 0 },
+              "severity": { "enum": ["good", "adjust", "review"] },
+              "message": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "disclaimer": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "frame": {
+      "type": "object",
+      "required": ["sequence_index", "frame_index", "timestamp_usec", "image"],
+      "properties": {
+        "sequence_index": { "type": "integer", "minimum": 0 },
+        "frame_index": { "type": "integer", "minimum": 0 },
+        "timestamp_usec": { "type": ["integer", "null"], "minimum": 0 },
+        "image": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

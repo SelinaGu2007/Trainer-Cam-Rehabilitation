@@ -18,7 +18,10 @@ public:
         bool voiceEnabledByDefault,
         double voiceRate,
         double voiceVolume,
-        QWidget *parent = nullptr);
+        QWidget *parent = nullptr,
+        const QString &reviewPath = QString(),
+        const QString &customerFolder = QString(),
+        const QString &tutorFolder = QString());
 
     bool isValid() const;
 
@@ -33,6 +36,9 @@ private:
     QJsonObject Summary;
     QString Locale;
     QString SpokenText;
+    QString ReviewPath;
+    QString CustomerFolder;
+    QString TutorFolder;
     bool Valid = false;
     QTextToSpeech *Speech = nullptr;
     QCheckBox *VoiceCheckBox = nullptr;

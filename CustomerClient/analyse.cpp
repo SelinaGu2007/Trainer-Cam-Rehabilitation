@@ -7,9 +7,6 @@
 #include <QFileInfo>
 #include <QTimer>
 
-#include <string>
-
-#pragma comment(lib,"user32")
 
 Analyse::Analyse(QWidget *parent) :
     QWidget(parent),
@@ -99,8 +96,10 @@ void Analyse::on_pushButtonAnalyse_clicked()
     QString program = AnalyzerProgram;
     const QString assessmentPath = QDir(folder_customer).filePath("assessment.json");
     const QString feedbackPath = QDir(folder_customer).filePath("feedback_summary.json");
+    const QString reviewPath = QDir(folder_customer).filePath("session_review.json");
     QFile::remove(assessmentPath);
     QFile::remove(feedbackPath);
+    QFile::remove(reviewPath);
     QStringList arguments = AnalyzerPrefixArguments;
     arguments << "--folder_tutor" << dir1
               << "--folder_customer" << dir2
@@ -108,14 +107,15 @@ void Analyse::on_pushButtonAnalyse_clicked()
               << "--tracking-config" << SubjectTrackingConfig
               << "--report-output" << assessmentPath
               << "--feedback-output" << feedbackPath
+              << "--review-output" << reviewPath
               << "--feedback-locale" << FeedbackLocale
-              << "--function" << "showVideos";
+              << "--function" << "artifacts";
 
 
 
     QProcess *process = new QProcess(this);
     ui->pushButtonAnalyse->setEnabled(false);
-    startFeedbackPolling(feedbackPath);
+    startFeedbackPolling(feedbackPath, reviewPath, folder_customer, folder_tutor);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     connect(process, &QProcess::errorOccurred, this, [this, program](QProcess::ProcessError error) {
         FeedbackTimer->stop();
@@ -139,10 +139,6 @@ void Analyse::on_pushButtonAnalyse_clicked()
         process->deleteLater();
     });
     process->start(program, arguments);
-
-    moveWindowAnalyse(L"Ananlse_outcome",dir2+"//analyse");
-
-
 
 }
 
@@ -182,37 +178,16 @@ void Analyse::on_pushButtonDelete_clicked()
      displayListDirectories1(MyRecordingFolder);
 }
 
-void Analyse::moveWindowAnalyse(const wchar_t* windowName,QString dirname){
-    auto *timer = new QTimer(this);
-    timer->setInterval(100);
-    timer->setProperty("attempts", 0);
-    const std::wstring title(windowName);
-    connect(timer, &QTimer::timeout, this, [timer, title, dirname]() {
-        const int attempts = timer->property("attempts").toInt() + 1;
-        timer->setProperty("attempts", attempts);
-        QDir directory(dirname);
-        if (directory.exists() && !directory.isEmpty()) {
-            HWND hwnd = FindWindow(nullptr, title.c_str());
-            if (hwnd != nullptr) {
-                const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-                MoveWindow(hwnd, 0, screenHeight / 6, screenWidth, screenHeight * 5 / 6, true);
-                timer->stop();
-                timer->deleteLater();
-                return;
-            }
-        }
-        if (attempts >= 1500) {
-            timer->stop();
-            timer->deleteLater();
-        }
-    });
-    timer->start();
-}
-
-void Analyse::startFeedbackPolling(const QString &feedbackPath)
+void Analyse::startFeedbackPolling(
+    const QString &feedbackPath,
+    const QString &reviewPath,
+    const QString &customerFolder,
+    const QString &tutorFolder)
 {
     PendingFeedbackPath = feedbackPath;
+    PendingReviewPath = reviewPath;
+    PendingCustomerFolder = customerFolder;
+    PendingTutorFolder = tutorFolder;
     FeedbackPollAttempts = 0;
     FeedbackTimer->start();
 }
@@ -226,7 +201,10 @@ void Analyse::tryShowFeedback()
             VoiceFeedbackEnabled,
             VoiceRate,
             VoiceVolume,
-            this);
+            this,
+            PendingReviewPath,
+            PendingCustomerFolder,
+            PendingTutorFolder);
         if (dialog->isValid()) {
             FeedbackTimer->stop();
             dialog->setAttribute(Qt::WA_DeleteOnClose);

@@ -3,6 +3,7 @@ set(CUSTOMER_CLIENT_SOURCES
     ../common/applogger.cpp
     ClientStuff.cpp
     assessmentresultdialog.cpp
+    assessmentreviewdialog.cpp
     analyse.cpp
     login.cpp
     main.cpp
@@ -10,6 +11,7 @@ set(CUSTOMER_CLIENT_SOURCES
     recordconfiguation.cpp
     ClientStuff.h
     assessmentresultdialog.h
+    assessmentreviewdialog.h
     analyse.h
     login.h
     mainwindow.h

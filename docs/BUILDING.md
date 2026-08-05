@@ -77,6 +77,8 @@ The clients expect the recorder, video player and analyzer at the paths declared
 
 If the packaged analyzer configured at `paths.analyzer` is absent, the Qt clients automatically fall back to `python test_exe/main.py` when Python is available on `PATH`. A packaged analyzer remains preferred for deployment.
 
+CustomerClient's normal assessment flow asks the analyzer for `assessment.json`, `feedback_summary.json` and `session_review.json`. The last artifact drives the native aligned review window and does not require the legacy OpenCV result player. Use `CustomerClient.exe --review-preview REVIEW_JSON CUSTOMER_SESSION TUTOR_SESSION --locale en-US` for UI verification without signing in.
+
 ## Azure Kinect recorder
 
 `simple_3d_viewer/simple_3d_viewer.sln` uses Visual Studio 2022 and NuGet package restore. The unified script above sets `OPENCV_DIR`; when invoking MSBuild directly, define it as the OpenCV build directory containing `include` and `x64/vc16/lib`.

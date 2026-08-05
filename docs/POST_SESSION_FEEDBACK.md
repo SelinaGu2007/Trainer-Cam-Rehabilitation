@@ -12,6 +12,7 @@ The result window contains:
 - a visible warning when tracking or joint data needs caution;
 - an explicit statement that the result is not a diagnosis;
 - a user-controlled voice option and replay button.
+- an entry point to the aligned side-by-side movement review when review data is available.
 
 The voice preference is remembered with local Qt settings. `config/app.json` provides deployment defaults for locale, voice enabled state, speaking rate and volume. Supported summary locales are `en-US` and `zh-CN`.
 

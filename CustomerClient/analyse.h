@@ -9,7 +9,6 @@
 #include <QListWidgetItem>
 #include <QStringList>
 #include <QTimer>
-#include <Windows.h>
 namespace Ui {
 class Analyse;
 }
@@ -23,8 +22,11 @@ public:
     ~Analyse();
 
     void displayListDirectories1(const QString& directory);
-    void moveWindowAnalyse(const wchar_t* windowName,QString dirname);
-    void startFeedbackPolling(const QString &feedbackPath);
+    void startFeedbackPolling(
+        const QString &feedbackPath,
+        const QString &reviewPath,
+        const QString &customerFolder,
+        const QString &tutorFolder);
 private slots:
     void on_pushButtonAnalyse_clicked();
     void onShowEvent1();
@@ -45,6 +47,9 @@ private:
     double VoiceVolume = 0.8;
     QTimer *FeedbackTimer = nullptr;
     QString PendingFeedbackPath;
+    QString PendingReviewPath;
+    QString PendingCustomerFolder;
+    QString PendingTutorFolder;
     int FeedbackPollAttempts = 0;
 
 protected:

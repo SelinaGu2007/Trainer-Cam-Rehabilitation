@@ -15,6 +15,7 @@ from feedback_summary import create_feedback_summary
 from motion_data import load_legacy_frames, load_session_bodies, load_session_track
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
 from realtime_feedback import load_realtime_config, run_realtime_feedback
+from session_review import create_session_review
 from subject_tracking import load_tracking_config
 
 try:
@@ -248,7 +249,7 @@ def getargs(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='two folder', add_help=True)
     parser.add_argument("--folder_tutor", default="NULL", help='tutor session folder')
     parser.add_argument("--folder_customer", default="NULL", help='customer session folder')
-    parser.add_argument("--function", default='NULL', help='select from realtime,tracking,quality,report,showVideos,score,showMaxDiffetence')
+    parser.add_argument("--function", default='NULL', help='select from realtime,tracking,quality,artifacts,report,showVideos,score,showMaxDiffetence')
     parser.add_argument("--profile", default=None, help='exercise profile id or JSON path')
     parser.add_argument("--tracking-config", default=None, help='subject tracking JSON path')
     parser.add_argument("--realtime-config", default=None, help='real-time feedback JSON path')
@@ -256,6 +257,7 @@ def getargs(args=sys.argv[1:]):
     parser.add_argument("--customer-body-id", type=int, default=None, help='explicit customer body ID')
     parser.add_argument("--report-output", default=None, help='optional assessment JSON output path')
     parser.add_argument("--feedback-output", default=None, help='optional user feedback JSON output path')
+    parser.add_argument("--review-output", default=None, help='optional post-session review JSON output path')
     parser.add_argument("--feedback-locale", default="en-US", choices=("en-US", "zh-CN"))
     parser.add_argument("--live-output", default=None, help='real-time feedback JSONL output path')
     parser.add_argument("--live-summary-output", default=None, help='real-time summary JSON output path')
@@ -315,6 +317,7 @@ def main():
     cached_report_ready = (
         (not args.report_output or Path(args.report_output).is_file())
         and (not args.feedback_output or Path(args.feedback_output).is_file())
+        and (not args.review_output or Path(args.review_output).is_file())
     )
     if (function == "showVideos" and os.path.exists(analyse_folder)
             and os.listdir(analyse_folder) and cached_report_ready):
@@ -413,6 +416,23 @@ def main():
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         LOGGER.info("Assessment report written to %s", report_path)
+    if args.review_output:
+        review = create_session_review(
+            customer_angles=Angle_B,
+            tutor_angles=Angle_A,
+            path=paths,
+            profile=profile,
+            customer_motion=prepared_B,
+            tutor_motion=prepared_A,
+            assessment_report=report,
+        )
+        review_path = Path(args.review_output)
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        review_path.write_text(
+            json.dumps(review, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        LOGGER.info("Session review timeline written to %s", review_path)
     if args.feedback_output:
         feedback = create_feedback_summary(report, locale=args.feedback_locale)
         feedback_path = Path(args.feedback_output)
@@ -424,7 +444,10 @@ def main():
         LOGGER.info("User feedback summary written to %s", feedback_path)
 
 
-    if function == 'score':
+    if function == "artifacts":
+        LOGGER.info("Assessment artifacts completed")
+
+    elif function == 'score':
         print(report["overall_score"])
 
     elif function == "report":
@@ -469,7 +492,7 @@ def main():
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: realtime, tracking, quality, report, score, showVideos, showMaxDiffetence")
+        raise ValueError("Unknown --function. Use: realtime, tracking, quality, artifacts, report, score, showVideos, showMaxDiffetence")
 
     return 0
 

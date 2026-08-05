@@ -14,6 +14,7 @@ SOURCES += \
     ../common/applogger.cpp \
     ClientStuff.cpp \
     assessmentresultdialog.cpp \
+    assessmentreviewdialog.cpp \
     analyse.cpp \
     login.cpp \
     main.cpp \
@@ -25,6 +26,7 @@ HEADERS += \
     ../common/applogger.h \
     ClientStuff.h \
     assessmentresultdialog.h \
+    assessmentreviewdialog.h \
     analyse.h \
     login.h \
     mainwindow.h \

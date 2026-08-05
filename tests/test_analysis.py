@@ -176,6 +176,37 @@ Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidenc
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
+    def test_artifact_mode_writes_results_without_stdout_viewer_output(self):
+        output_folder = PROJECT_ROOT / ".test-motion-data" / "artifact-mode-integration"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        report_path = output_folder / "assessment.json"
+        feedback_path = output_folder / "feedback.json"
+        review_path = output_folder / "review.json"
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "tutor_session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--function",
+            "artifacts",
+            "--report-output",
+            str(report_path),
+            "--feedback-output",
+            str(feedback_path),
+            "--review-output",
+            str(review_path),
+        ]
+        try:
+            completed = subprocess.run(command, check=True, capture_output=True, text=True)
+            self.assertEqual(completed.stdout.strip(), "")
+            self.assertTrue(report_path.is_file())
+            self.assertTrue(feedback_path.is_file())
+            self.assertTrue(review_path.is_file())
+        finally:
+            shutil.rmtree(output_folder, ignore_errors=True)
+
     def test_public_samples_pass_subject_tracking_gates(self):
         command = [
             sys.executable,
@@ -232,6 +263,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         output_folder.mkdir(parents=True, exist_ok=True)
         output_path = output_folder / "assessment.json"
         feedback_path = output_folder / "feedback.json"
+        review_path = output_folder / "review.json"
         command = [
             sys.executable,
             str(ANALYSIS_DIR / "main.py"),
@@ -247,12 +279,15 @@ class AnalysisIntegrationTests(unittest.TestCase):
             str(output_path),
             "--feedback-output",
             str(feedback_path),
+            "--review-output",
+            str(review_path),
         ]
         try:
             completed = subprocess.run(command, check=True, capture_output=True, text=True)
             report = json.loads(completed.stdout)
             saved_report = json.loads(output_path.read_text(encoding="utf-8"))
             feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
+            review = json.loads(review_path.read_text(encoding="utf-8"))
             self.assertEqual(report["format"], "trainercam.assessment-report")
             self.assertEqual(report["profile"]["id"], "arm_raise")
             self.assertEqual(len(report["feature_scores"]), 9)
@@ -261,6 +296,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
             self.assertEqual(saved_report["overall_score"], report["overall_score"])
             self.assertEqual(feedback["format"], "trainercam.feedback-summary")
             self.assertEqual(feedback["overall_score"], report["overall_score"])
+            self.assertEqual(review["format"], "trainercam.session-review")
+            self.assertEqual(review["item_count"], report["alignment"]["path_length"])
+            self.assertGreaterEqual(review["worst_segment"]["focus_index"], 0)
             self.assertGreaterEqual(report["overall_score"], 0.0)
             self.assertLessEqual(report["overall_score"], 100.0)
         finally:

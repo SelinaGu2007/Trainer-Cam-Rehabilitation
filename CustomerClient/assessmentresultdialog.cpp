@@ -1,14 +1,17 @@
 #include "assessmentresultdialog.h"
+#include "assessmentreviewdialog.h"
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLocale>
 #include <QPushButton>
+#include <QMessageBox>
 #include <QSettings>
 #include <QTextToSpeech>
 #include <QTimer>
@@ -19,8 +22,14 @@ AssessmentResultDialog::AssessmentResultDialog(
     bool voiceEnabledByDefault,
     double voiceRate,
     double voiceVolume,
-    QWidget *parent)
-    : QDialog(parent)
+    QWidget *parent,
+    const QString &reviewPath,
+    const QString &customerFolder,
+    const QString &tutorFolder)
+    : QDialog(parent),
+      ReviewPath(reviewPath),
+      CustomerFolder(customerFolder),
+      TutorFolder(tutorFolder)
 {
     Valid = loadSummary(summaryPath);
     if (Valid) {
@@ -148,6 +157,30 @@ void AssessmentResultDialog::buildInterface(
     SpeakButton = new QPushButton(chinese ? QStringLiteral("重新朗读") : QStringLiteral("Play voice feedback"), this);
     connect(SpeakButton, &QPushButton::clicked, this, &AssessmentResultDialog::speak);
     layout->addWidget(SpeakButton);
+
+    if (QFileInfo::exists(ReviewPath) && !CustomerFolder.isEmpty() && !TutorFolder.isEmpty()) {
+        auto *reviewButton = new QPushButton(
+            chinese ? QStringLiteral("回看动作对比") : QStringLiteral("Review movement comparison"),
+            this);
+        connect(reviewButton, &QPushButton::clicked, this, [this]() {
+            auto *review = new AssessmentReviewDialog(
+                ReviewPath, CustomerFolder, TutorFolder, Locale, this);
+            if (!review->isValid()) {
+                review->deleteLater();
+                QMessageBox::warning(
+                    this,
+                    Locale == "zh-CN" ? QStringLiteral("动作回看") : QStringLiteral("Movement review"),
+                    Locale == "zh-CN" ? QStringLiteral("无法读取本次动作回看数据。")
+                                       : QStringLiteral("The movement review data could not be read."));
+                return;
+            }
+            review->setAttribute(Qt::WA_DeleteOnClose);
+            review->show();
+            review->raise();
+            review->activateWindow();
+        });
+        layout->addWidget(reviewButton);
+    }
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
