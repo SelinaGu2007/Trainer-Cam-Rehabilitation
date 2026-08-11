@@ -3,11 +3,11 @@
 
 #include <QWidget>
 #include <QDir>
+#include <QPointer>
 #include <QProcess>
 #include <QShowEvent>
 #include <QListWidgetItem>
 #include <QMessageBox>
-#include <Windows.h>
 #include <QInputDialog>
 #include <QFileDialog>
 namespace Ui {
@@ -22,8 +22,7 @@ public:
     explicit Record(QWidget *parent = nullptr);
     ~Record();
 
-     void displayListDirectories(const QString& directory);
-     void moveWindowToMiddle(const wchar_t* windowName,QString filename);
+    void displayListDirectories(const QString& directory);
 private slots:
     void on_pushButtonRecord_clicked();
     void onShowEvent();
@@ -34,7 +33,14 @@ private slots:
     void on_pushButtonDelete_clicked();
 
 private:
+    QString safeSessionPath(const QString &sessionName) const;
+    void setRecordingUi(bool recording);
+    void finishRecorderProcess(QProcess *process);
+    void offerIncompleteRecordingCleanup(const QString &directoryPath);
+
     Ui::Record *ui;
+    QPointer<QProcess> RecorderProcess;
+    QString RecordButtonText;
     QString TutorFolder;
     QString RecorderProgram;
     QString VideoPlayerProgram;

@@ -44,7 +44,6 @@ private slots:
     void on_pushButtonAnalyse_clicked();
 
 private:
-    void trackAndMoveProcessWindow(QProcess *process, int timeoutMs);
     void finishAnalysisProcess(QProcess *process, const QString &statusMessage);
 
     Ui::MainWindow *ui;

@@ -1,55 +1,9 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "appconfig.h"
-
-#include <QElapsedTimer>
-#include <QTimer>
-#include <Windows.h>
-
-#include <memory>
+#include "processwindowtracker.h"
 
 namespace {
-
-struct WindowSearchContext
-{
-    DWORD processId;
-    HWND window = nullptr;
-};
-
-BOOL CALLBACK findVisibleProcessWindow(HWND window, LPARAM parameter)
-{
-    auto *context = reinterpret_cast<WindowSearchContext *>(parameter);
-    DWORD ownerProcessId = 0;
-    GetWindowThreadProcessId(window, &ownerProcessId);
-    if (ownerProcessId == context->processId
-        && IsWindowVisible(window)
-        && GetWindow(window, GW_OWNER) == nullptr) {
-        context->window = window;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-HWND findVisibleProcessWindow(qint64 processId)
-{
-    if (processId <= 0) {
-        return nullptr;
-    }
-    WindowSearchContext context{static_cast<DWORD>(processId), nullptr};
-    EnumWindows(findVisibleProcessWindow, reinterpret_cast<LPARAM>(&context));
-    return context.window;
-}
-
-void fillPrimaryScreen(HWND window)
-{
-    MoveWindow(
-        window,
-        0,
-        0,
-        GetSystemMetrics(SM_CXSCREEN),
-        GetSystemMetrics(SM_CYSCREEN),
-        TRUE);
-}
 
 QString processDetails(QProcess *process)
 {
@@ -150,7 +104,8 @@ void MainWindow::on_pushButtonDisplay_clicked()
     // Create process
     QProcess *process = new QProcess(this);
     connect(process, &QProcess::started, this, [this, process]() {
-        trackAndMoveProcessWindow(process, 10000);
+        trackProcessWindow(
+            this, process, 10000, ProcessWindowPlacement::PrimaryScreen);
     });
     connect(process, &QProcess::errorOccurred, this,
             [this, process, program](QProcess::ProcessError error) {
@@ -228,7 +183,8 @@ void MainWindow::on_pushButtonAnalyse_clicked()
     process->setProcessChannelMode(QProcess::SeparateChannels);
     connect(process, &QProcess::started, this, [this, process]() {
         statusBar()->showMessage("Motion analysis is running...");
-        trackAndMoveProcessWindow(process, 150000);
+        trackProcessWindow(
+            this, process, 150000, ProcessWindowPlacement::PrimaryScreen);
     });
     connect(process, &QProcess::errorOccurred, this, [this, process, program](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart || AnalyzerProcess != process) {
@@ -277,35 +233,6 @@ void MainWindow::on_pushButtonAnalyse_clicked()
                 : "Motion analysis failed.");
     });
     process->start(program, arguments);
-}
-
-void MainWindow::trackAndMoveProcessWindow(QProcess *process, int timeoutMs)
-{
-    auto *timer = new QTimer(this);
-    auto elapsed = std::make_shared<QElapsedTimer>();
-    QPointer<QProcess> processGuard(process);
-    elapsed->start();
-
-    connect(timer, &QTimer::timeout, this,
-            [timer, elapsed, processGuard, timeoutMs]() {
-        if (!processGuard) {
-            timer->stop();
-            timer->deleteLater();
-            return;
-        }
-        if (HWND window = findVisibleProcessWindow(processGuard->processId())) {
-            fillPrimaryScreen(window);
-            timer->stop();
-            timer->deleteLater();
-            return;
-        }
-        if (elapsed->elapsed() >= timeoutMs
-            || processGuard->state() == QProcess::NotRunning) {
-            timer->stop();
-            timer->deleteLater();
-        }
-    });
-    timer->start(100);
 }
 
 void MainWindow::finishAnalysisProcess(QProcess *process, const QString &statusMessage)

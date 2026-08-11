@@ -1,6 +1,7 @@
 set(TUTOR_CLIENT_SOURCES
     ../common/appconfig.cpp
     ../common/applogger.cpp
+    ../common/processwindowtracker.cpp
     login.cpp
     main.cpp
     mainwindow.cpp
@@ -10,6 +11,7 @@ set(TUTOR_CLIENT_SOURCES
     mainwindow.h
     record.h
     serverstuff.h
+    ../common/processwindowtracker.h
     login.ui
     mainwindow.ui
     record.ui

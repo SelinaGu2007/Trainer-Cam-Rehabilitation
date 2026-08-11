@@ -11,6 +11,7 @@ CONFIG += c++17
 SOURCES += \
     ../common/appconfig.cpp \
     ../common/applogger.cpp \
+    ../common/processwindowtracker.cpp \
     login.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -20,6 +21,7 @@ SOURCES += \
 HEADERS += \
     ../common/appconfig.h \
     ../common/applogger.h \
+    ../common/processwindowtracker.h \
     login.h \
     mainwindow.h \
     record.h \

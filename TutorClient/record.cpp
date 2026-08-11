@@ -1,8 +1,30 @@
 #include "record.h"
 #include "ui_record.h"
 #include "appconfig.h"
+#include "processwindowtracker.h"
+
+#include <QFileInfo>
+#include <QRegularExpression>
+
 #include <exception>
-#pragma comment(lib,"user32")
+
+namespace {
+
+QString processDetails(QProcess *process)
+{
+    return QString::fromUtf8(process->readAllStandardError()).trimmed();
+}
+
+bool relativePathEscapesRoot(const QString &relativePath)
+{
+    return relativePath == ".."
+        || relativePath.startsWith("../")
+        || relativePath.startsWith("..\\")
+        || QDir::isAbsolutePath(relativePath);
+}
+
+} // namespace
+
 Record::Record(QWidget *parent) :
     QWidget(parent, Qt::Window),
     ui(new Ui::Record)
@@ -12,6 +34,7 @@ Record::Record(QWidget *parent) :
     TutorFolder = config.tutorRecordingsDir;
     RecorderProgram = config.recorderProgram;
     VideoPlayerProgram = config.videoPlayerProgram;
+    RecordButtonText = ui->pushButtonRecord->text();
 }
 
 Record::~Record()
@@ -46,8 +69,7 @@ void Record::displayListDirectories(const QString& directory){
 }
 
 void Record::showEvent(QShowEvent* event) {
-    Q_UNUSED(event);
-
+    QWidget::showEvent(event);
     displayListDirectories(TutorFolder);// Change this to the desired directory
 }
 
@@ -60,45 +82,145 @@ void Record::onShowEvent() {
 
 void Record::on_pushButtonRecord_clicked()
 {
+    if (RecorderProcess && RecorderProcess->state() != QProcess::NotRunning) {
+        QMessageBox::information(this, "Recording", "A tutor recording is already running.");
+        return;
+    }
 
     bool ok;
     QString directoryName = QInputDialog::getText(this, "", "Please Directory Name:", QLineEdit::Normal, "", &ok);
-    qDebug()<<directoryName;
-    if(!ok |directoryName.isEmpty()){
-       return;
+    directoryName = directoryName.trimmed();
+    if (!ok || directoryName.isEmpty()) {
+        return;
     }
-    QString directorypath = QDir(TutorFolder).filePath(directoryName);
-     QDir dir(directorypath);
-     if(!dir.exists()){
-         dir.mkpath(".");
-     }
-      QString program = RecorderProgram;
-      const AppConfig &config = AppConfig::instance();
-      QString recordingInput = config.captureRecordingPath;
-      if (config.captureUsesRecording() && recordingInput.isEmpty()) {
-          recordingInput = QFileDialog::getOpenFileName(
-              this,
-              "Select Azure Kinect recording",
-              QString(),
-              "Azure Kinect recordings (*.mkv);;All files (*)");
-          if (recordingInput.isEmpty()) {
-              return;
-          }
-      }
-      QStringList recorderArguments;
-      try {
-          recorderArguments = config.recorderArguments(directorypath, recordingInput);
-      } catch (const std::exception &error) {
-          QMessageBox::critical(this, "Capture source", error.what());
-          return;
-      }
-      QProcess *process = new QProcess(this);
-      process->start(program, recorderArguments);
-      moveWindowToMiddle(L"Color_Image",directorypath+"\\flag.txt");
-      displayListDirectories(TutorFolder);
+    static const QRegularExpression validSessionName(
+        "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$");
+    if (!validSessionName.match(directoryName).hasMatch()) {
+        QMessageBox::warning(
+            this,
+            "Invalid Recording Name",
+            "Use 1-64 letters, numbers, underscores or hyphens.");
+        return;
+    }
 
+    const QString directoryPath = safeSessionPath(directoryName);
+    if (directoryPath.isEmpty()) {
+        QMessageBox::critical(
+            this,
+            "Invalid Recording Path",
+            "The recording directory must remain inside the configured tutor folder.");
+        return;
+    }
+    if (QFileInfo::exists(directoryPath)) {
+        QMessageBox::warning(
+            this,
+            "Recording Already Exists",
+            "A tutor recording with this name already exists. Please choose a unique name.");
+        return;
+    }
 
+    const AppConfig &config = AppConfig::instance();
+    QString recordingInput = config.captureRecordingPath;
+    if (config.captureUsesRecording() && recordingInput.isEmpty()) {
+        recordingInput = QFileDialog::getOpenFileName(
+            this,
+            "Select Azure Kinect recording",
+            QString(),
+            "Azure Kinect recordings (*.mkv);;All files (*)");
+        if (recordingInput.isEmpty()) {
+            return;
+        }
+    }
 
+    QStringList recorderArguments;
+    try {
+        recorderArguments = config.recorderArguments(directoryPath, recordingInput);
+    } catch (const std::exception &error) {
+        QMessageBox::critical(this, "Capture source", error.what());
+        return;
+    }
+
+    auto *process = new QProcess(this);
+    RecorderProcess = process;
+    setRecordingUi(true);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    connect(process, &QProcess::started, this, [this, process]() {
+        trackProcessWindow(
+            this,
+            process,
+            10000,
+            ProcessWindowPlacement::LowerThreeQuarters);
+    });
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || RecorderProcess != process) {
+            return;
+        }
+        QMessageBox::critical(
+            this,
+            "Recording Error",
+            "Unable to start the Kinect recorder.\n\n" + process->errorString());
+        finishRecorderProcess(process);
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process, directoryPath](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (RecorderProcess != process) {
+            process->deleteLater();
+            return;
+        }
+
+        const bool completionMarkerExists = QFileInfo::exists(
+            QDir(directoryPath).filePath("recording.complete"));
+        const QString details = processDetails(process);
+        const QString suffix = details.isEmpty() ? QString() : "\n\n" + details;
+        const bool succeeded = exitStatus == QProcess::NormalExit
+            && exitCode == 0
+            && completionMarkerExists;
+
+        if (succeeded) {
+            QMessageBox::information(
+                this,
+                "Recording Complete",
+                "The tutor recording completed successfully.");
+        } else if (exitStatus != QProcess::NormalExit) {
+            QMessageBox::critical(
+                this,
+                "Recording Error",
+                "The Kinect recorder stopped unexpectedly." + suffix);
+        } else if (exitCode == 10) {
+            QMessageBox::warning(
+                this,
+                "Capture Failed",
+                "Kinect capture or body tracking failed before the recording completed." + suffix);
+        } else if (exitCode == 2 || exitCode == -1 || exitCode == 255) {
+            QMessageBox::critical(
+                this,
+                "Recording Configuration Error",
+                "The recorder received invalid arguments." + suffix);
+        } else if (exitCode >= 3 && exitCode <= 9) {
+            QMessageBox::critical(
+                this,
+                "Recording Storage Error",
+                "The recorder could not prepare its capture source or output files." + suffix);
+        } else if (!completionMarkerExists) {
+            QMessageBox::critical(
+                this,
+                "Incomplete Recording",
+                "The recorder exited without writing its completion marker." + suffix);
+        } else {
+            QMessageBox::critical(
+                this,
+                "Recording Error",
+                "The recorder stopped because of an unexpected error." + suffix);
+        }
+
+        if (!succeeded) {
+            offerIncompleteRecordingCleanup(directoryPath);
+        }
+        finishRecorderProcess(process);
+    });
+    process->start(RecorderProgram, recorderArguments);
 }
 
 void Record::on_pushButtonDispaly_clicked()
@@ -110,16 +232,29 @@ void Record::on_pushButtonDispaly_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dir = QDir(TutorFolder).filePath(subdir1);
+    const QString dir = safeSessionPath(subdir1);
+    if (dir.isEmpty() || !QDir(dir).exists()) {
+        QMessageBox::warning(this, "Playback Error", "The selected recording directory is invalid.");
+        return;
+    }
     QString program = VideoPlayerProgram;
 
     // Create process
     QProcess *process = new QProcess(this);
 
     // Connect process signals to slots
-    connect(process, &QProcess::errorOccurred, this, [program](QProcess::ProcessError error) {
-        qWarning() << "Unable to start video player" << program << error;
+    connect(process, &QProcess::errorOccurred, this, [this, process, program](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            QMessageBox::critical(
+                this,
+                "Playback Error",
+                QString("Unable to start the video player: %1\n\n%2")
+                    .arg(program, process->errorString()));
+            process->deleteLater();
+        }
     });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            process, &QObject::deleteLater);
 
     // Start the process
     process->start(program, QStringList() << "--folder" << dir);
@@ -131,6 +266,11 @@ void Record::on_pushButtonDispaly_clicked()
 
 void Record::on_pushButtonDelete_clicked()
 {
+    if (RecorderProcess && RecorderProcess->state() != QProcess::NotRunning) {
+        QMessageBox::information(this, "Recording", "Wait for the active recording to finish before deleting sessions.");
+        return;
+    }
+
     QListWidgetItem *subdir = ui->listWidgetTutorRecording->currentItem();
     if (!subdir) {
         // No item selected, handle this case as needed
@@ -138,7 +278,14 @@ void Record::on_pushButtonDelete_clicked()
     }
 
     QString subdir1 = subdir->text();
-    QString dirpath = QDir(TutorFolder).filePath(subdir1);
+    const QString dirpath = safeSessionPath(subdir1);
+    if (dirpath.isEmpty()) {
+        QMessageBox::critical(
+            this,
+            "Unsafe Recording Path",
+            "The selected directory resolves outside the configured tutor folder and cannot be deleted.");
+        return;
+    }
     QDir dir(dirpath);
 
     // Check if the directory exists
@@ -148,13 +295,21 @@ void Record::on_pushButtonDelete_clicked()
     }
 
     // Display a confirmation dialog
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, "Confirm Removal", "Are you sure you want to remove the directory at '" + subdir1 + "' and its contents?",
-                                  QMessageBox::Yes | QMessageBox::No);
+    const QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "Confirm Removal",
+        "Are you sure you want to remove the directory at '" + subdir1 + "' and its contents?",
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
 
     if (reply == QMessageBox::Yes) {
-        // User clicked Yes, so remove the directory and its contents
-        if (dir.removeRecursively()) {
+        const QString verifiedPath = safeSessionPath(subdir1);
+        if (verifiedPath.isEmpty() || QDir::cleanPath(verifiedPath) != dirpath) {
+            QMessageBox::critical(
+                this,
+                "Unsafe Recording Path",
+                "The selected directory changed while awaiting confirmation and cannot be deleted.");
+        } else if (QDir(verifiedPath).removeRecursively()) {
             QMessageBox::information(this, "Success", "Directory removed successfully!");
         } else {
             QMessageBox::critical(this, "Error", "Failed to remove directory!");
@@ -163,42 +318,75 @@ void Record::on_pushButtonDelete_clicked()
     displayListDirectories(TutorFolder);
 }
 
+QString Record::safeSessionPath(const QString &sessionName) const
+{
+    const QDir tutorRoot(QDir(TutorFolder).absolutePath());
+    const QString targetPath = QDir::cleanPath(tutorRoot.absoluteFilePath(sessionName));
+    const QString relativePath = tutorRoot.relativeFilePath(targetPath);
+    if (relativePath == "." || relativePathEscapesRoot(relativePath)) {
+        return QString();
+    }
 
-
-void Record::moveWindowToMiddle(const wchar_t* windowName,QString filename) {
-    // Find the window by its name
-
-    QFile File(filename);
-    for( int i=0; i<=100; i++){
-
-        if( File.exists()){
-
-            HWND hwnd = FindWindow(nullptr, windowName);
-
-            if (hwnd != nullptr) {
-                if(IsWindowVisible(hwnd)){
-                    // Get the screen width
-                    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-                    // Set the new position for the window (adjust the values as needed)
-                    int newX = 0; // move to the right half of the screen
-                    int newY = screenHeight*1/4;
-
-                    // Move the window
-
-                    MoveWindow(hwnd, newX, newY, screenWidth, screenHeight*3/4,true);// repaint the window
-                   // File.remove();
-                    break;
-                    }
-            }
-            else{
-                Sleep(100);
-            }
-
-        } else {
-            Sleep(100);
-
+    const QFileInfo targetInfo(targetPath);
+    if (targetInfo.exists()) {
+        const QString canonicalRoot = QFileInfo(tutorRoot.absolutePath()).canonicalFilePath();
+        const QString canonicalTarget = targetInfo.canonicalFilePath();
+        if (canonicalRoot.isEmpty() || canonicalTarget.isEmpty()) {
+            return QString();
         }
+        const QString canonicalRelative = QDir(canonicalRoot).relativeFilePath(canonicalTarget);
+        if (canonicalRelative == "." || relativePathEscapesRoot(canonicalRelative)) {
+            return QString();
+        }
+    }
+    return targetPath;
+}
+
+void Record::setRecordingUi(bool recording)
+{
+    ui->pushButtonRecord->setEnabled(!recording);
+    ui->pushButtonDelete->setEnabled(!recording);
+    ui->pushButtonRecord->setText(recording ? "Recording..." : RecordButtonText);
+}
+
+void Record::finishRecorderProcess(QProcess *process)
+{
+    if (RecorderProcess != process) {
+        return;
+    }
+    RecorderProcess = nullptr;
+    setRecordingUi(false);
+    displayListDirectories(TutorFolder);
+    process->deleteLater();
+}
+
+void Record::offerIncompleteRecordingCleanup(const QString &directoryPath)
+{
+    if (!QDir(directoryPath).exists()) {
+        return;
+    }
+
+    const QString sessionName = QFileInfo(directoryPath).fileName();
+    const QString verifiedPath = safeSessionPath(sessionName);
+    if (verifiedPath.isEmpty()
+        || QDir::cleanPath(verifiedPath) != QDir::cleanPath(directoryPath)) {
+        QMessageBox::critical(
+            this,
+            "Cleanup Error",
+            "The incomplete recording path can no longer be verified safely.");
+        return;
+    }
+
+    const QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "Incomplete Recording",
+        "The recording directory contains incomplete data. Remove it now?",
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (reply == QMessageBox::Yes && !QDir(verifiedPath).removeRecursively()) {
+        QMessageBox::critical(
+            this,
+            "Cleanup Error",
+            "Unable to remove the incomplete recording directory.");
     }
 }
