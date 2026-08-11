@@ -80,6 +80,17 @@ The existing `.pro` files can still be opened in Qt Creator, but CMake is the re
 
 The clients expect the recorder, video player and analyzer at the paths declared in `config/app.json`. Those programs can also be launched from source during development by changing a local configuration.
 
+### Analyzer process exit codes
+
+TutorClient uses the analyzer exit status to show an appropriate recovery message:
+
+- `0`: analysis completed successfully;
+- `10`: the recording failed subject-tracking or required-joint quality gates;
+- `20`: an input, motion-data or analysis-configuration error;
+- `30`: an unexpected internal analyzer error.
+
+Python argument parsing retains its conventional exit code `2`, which TutorClient also treats as an input error.
+
 If the packaged analyzer configured at `paths.analyzer` is absent, the Qt clients automatically fall back to `python test_exe/main.py` when Python is available on `PATH`. A packaged analyzer remains preferred for deployment.
 
 CustomerClient's normal assessment flow asks the analyzer for `assessment.json`, `feedback_summary.json` and `session_review.json`. The last artifact drives the native aligned review window and does not require the legacy OpenCV result player. Use `CustomerClient.exe --review-preview REVIEW_JSON CUSTOMER_SESSION TUTOR_SESSION --locale en-US` for UI verification without signing in.

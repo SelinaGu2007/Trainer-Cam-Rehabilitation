@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +46,19 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class AnalysisUnitTests(unittest.TestCase):
+    def test_cli_maps_quality_input_and_internal_failures_to_distinct_exit_codes(self):
+        cases = (
+            (analysis.SessionQualityError("quality"), analysis.EXIT_SESSION_QUALITY),
+            (analysis.AnalysisInputError("input"), analysis.EXIT_INVALID_INPUT),
+            (RuntimeError("internal"), analysis.EXIT_INTERNAL_ERROR),
+        )
+        with mock.patch.object(analysis.LOGGER, "error"), \
+                mock.patch.object(analysis.LOGGER, "exception"):
+            for error, expected in cases:
+                with self.subTest(error=type(error).__name__):
+                    with mock.patch.object(analysis, "main", side_effect=error):
+                        self.assertEqual(analysis.run_cli(), expected)
+
     def test_zero_length_vector_angle_is_safe(self):
         self.assertEqual(analysis.GetAngle([0, 0, 0], [1, 0, 0]), 0.0)
 
@@ -176,6 +190,38 @@ Joint[0]: Position[mm] ( 4, 5, 6 ); Orientation ( 0.5, 0.5, 0.5, 0.5); Confidenc
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
+    def test_cli_returns_input_error_for_a_missing_session(self):
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "missing-session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--function",
+            "score",
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(completed.returncode, analysis.EXIT_INVALID_INPUT)
+        self.assertIn("No session.json or output2.txt", completed.stderr)
+
+    def test_cli_returns_quality_error_when_the_requested_subject_is_absent(self):
+        command = [
+            sys.executable,
+            str(ANALYSIS_DIR / "main.py"),
+            "--folder_tutor",
+            str(PROJECT_ROOT / "data" / "samples" / "tutor_session"),
+            "--folder_customer",
+            str(PROJECT_ROOT / "data" / "samples" / "customer_session"),
+            "--tutor-body-id",
+            "999",
+            "--function",
+            "score",
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(completed.returncode, analysis.EXIT_SESSION_QUALITY)
+        self.assertIn("failed subject tracking gates", completed.stderr)
+
     def test_artifact_mode_writes_results_without_stdout_viewer_output(self):
         output_folder = PROJECT_ROOT / ".test-motion-data" / "artifact-mode-integration"
         output_folder.mkdir(parents=True, exist_ok=True)

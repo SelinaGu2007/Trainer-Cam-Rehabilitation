@@ -2,6 +2,63 @@
 #include "ui_mainwindow.h"
 #include "appconfig.h"
 
+#include <QElapsedTimer>
+#include <QTimer>
+#include <Windows.h>
+
+#include <memory>
+
+namespace {
+
+struct WindowSearchContext
+{
+    DWORD processId;
+    HWND window = nullptr;
+};
+
+BOOL CALLBACK findVisibleProcessWindow(HWND window, LPARAM parameter)
+{
+    auto *context = reinterpret_cast<WindowSearchContext *>(parameter);
+    DWORD ownerProcessId = 0;
+    GetWindowThreadProcessId(window, &ownerProcessId);
+    if (ownerProcessId == context->processId
+        && IsWindowVisible(window)
+        && GetWindow(window, GW_OWNER) == nullptr) {
+        context->window = window;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+HWND findVisibleProcessWindow(qint64 processId)
+{
+    if (processId <= 0) {
+        return nullptr;
+    }
+    WindowSearchContext context{static_cast<DWORD>(processId), nullptr};
+    EnumWindows(findVisibleProcessWindow, reinterpret_cast<LPARAM>(&context));
+    return context.window;
+}
+
+void fillPrimaryScreen(HWND window)
+{
+    MoveWindow(
+        window,
+        0,
+        0,
+        GetSystemMetrics(SM_CXSCREEN),
+        GetSystemMetrics(SM_CYSCREEN),
+        TRUE);
+}
+
+QString processDetails(QProcess *process)
+{
+    const QString standardError = QString::fromUtf8(process->readAllStandardError()).trimmed();
+    return standardError.isEmpty() ? process->errorString() : standardError;
+}
+
+} // namespace
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -16,6 +73,7 @@ MainWindow::MainWindow(QWidget *parent)
     ExerciseProfile = config.exerciseProfile;
     SubjectTrackingConfig = config.subjectTrackingConfig;
     ServerPort = config.port;
+    AnalyseButtonText = ui->pushButtonAnalyse->text();
     server = new ServerStuff(this);
     connect(server, &ServerStuff::gotNewMesssage,
             this, &MainWindow::gotNewMesssage);
@@ -68,8 +126,12 @@ void MainWindow::onShowEvent() {
 
 void MainWindow::on_pushButtonRecord_clicked()
 {
-   Record *R =new Record;
-   R->show();
+    if (!RecordWindow) {
+        RecordWindow = new Record(this);
+    }
+    RecordWindow->show();
+    RecordWindow->raise();
+    RecordWindow->activateWindow();
 }
 
 
@@ -87,14 +149,34 @@ void MainWindow::on_pushButtonDisplay_clicked()
 
     // Create process
     QProcess *process = new QProcess(this);
+    connect(process, &QProcess::started, this, [this, process]() {
+        trackAndMoveProcessWindow(process, 10000);
+    });
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process, program](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            QMessageBox::critical(
+                this,
+                "Video Player Error",
+                QString("Unable to start the video player: %1\n\n%2")
+                    .arg(program, process->errorString()));
+            process->deleteLater();
+        }
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            process, &QObject::deleteLater);
     process->start(program, QStringList() << "--folder" << dir);
-    moveWindow(L"Tutor");
 }
 
 
 
 void MainWindow::on_pushButtonAnalyse_clicked()
 {
+    if (AnalyzerProcess && AnalyzerProcess->state() != QProcess::NotRunning) {
+        QMessageBox::information(this, "Analysis", "Motion analysis is already running.");
+        return;
+    }
+
     QListWidgetItem *subdir = ui->listWidgetTask->currentItem();
     if (!subdir) {
         // No item selected, handle this case as needed
@@ -102,12 +184,28 @@ void MainWindow::on_pushButtonAnalyse_clicked()
     }
 
     QString subdir2 = subdir->text();
-    QString subdir1 = subdir2.section('-', 0, 0);
+    const QString referenceMarker = "-follow-";
+    const int markerIndex = subdir2.lastIndexOf(referenceMarker);
+    if (markerIndex <= 0) {
+        QMessageBox::warning(
+            this,
+            "Invalid Recording",
+            "The selected customer recording does not identify its tutor reference.");
+        return;
+    }
+    const QString subdir1 = subdir2.left(markerIndex);
 
 
 
     QString folder_tutor = QDir(TutorFolder).filePath(subdir1);
     QString folder_customer = QDir(CustomerFolder).filePath(subdir2);
+    if (!QDir(folder_tutor).exists()) {
+        QMessageBox::warning(
+            this,
+            "Tutor Recording Missing",
+            QString("Tutor recording does not exist:\n%1").arg(folder_tutor));
+        return;
+    }
     QString dir1 = QDir::toNativeSeparators(folder_tutor); // Ensure correct path separators
     QString dir2 = QDir::toNativeSeparators(folder_customer); // Ensure correct path separators
 
@@ -123,95 +221,103 @@ void MainWindow::on_pushButtonAnalyse_clicked()
 
 
     QProcess *process = new QProcess(this);
+    AnalyzerProcess = process;
+    ui->pushButtonAnalyse->setEnabled(false);
+    ui->pushButtonAnalyse->setText("Analyzing...");
+    statusBar()->showMessage("Starting motion analysis...");
     process->setProcessChannelMode(QProcess::SeparateChannels);
-    connect(process, &QProcess::errorOccurred, this, [this, program](QProcess::ProcessError error) {
+    connect(process, &QProcess::started, this, [this, process]() {
+        statusBar()->showMessage("Motion analysis is running...");
+        trackAndMoveProcessWindow(process, 150000);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process, program](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || AnalyzerProcess != process) {
+            return;
+        }
         QMessageBox::critical(
-            this, "Analysis Error",
-            QString("Unable to start the motion analyzer: %1\nError code: %2")
-                .arg(program).arg(static_cast<int>(error)));
+            this,
+            "Analysis Error",
+            QString("Unable to start the motion analyzer: %1\n\n%2")
+                .arg(program, process->errorString()));
+        finishAnalysisProcess(process, "Unable to start motion analysis.");
     });
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
-        if (exitStatus != QProcess::NormalExit || exitCode != 0) {
-            const QString details = QString::fromUtf8(process->readAllStandardError()).trimmed();
-            QMessageBox::warning(
-                this, "Session Quality Check",
-                "Motion analysis stopped because the recording did not pass its quality checks."
-                + (details.isEmpty() ? QString() : "\n\n" + details));
+        if (AnalyzerProcess != process) {
+            process->deleteLater();
+            return;
         }
-        process->deleteLater();
+        const QString details = processDetails(process);
+        const QString suffix = details.isEmpty() ? QString() : "\n\n" + details;
+        if (exitStatus != QProcess::NormalExit) {
+            QMessageBox::critical(
+                this,
+                "Analysis Error",
+                "The motion analyzer stopped unexpectedly." + suffix);
+        } else if (exitCode == 10) {
+            QMessageBox::warning(
+                this,
+                "Session Quality Check",
+                "The recording did not meet the required tracking or joint quality." + suffix);
+        } else if (exitCode == 2 || exitCode == 20) {
+            QMessageBox::critical(
+                this,
+                "Analysis Input Error",
+                "The recording or analysis configuration is invalid." + suffix);
+        } else if (exitCode != 0) {
+            QMessageBox::critical(
+                this,
+                "Analysis Error",
+                "The analyzer stopped because of an unexpected internal error." + suffix);
+        }
+        finishAnalysisProcess(
+            process,
+            exitStatus == QProcess::NormalExit && exitCode == 0
+                ? "Motion analysis completed."
+                : "Motion analysis failed.");
     });
     process->start(program, arguments);
-    moveWindow(L"Ananlse_outcome",dir2+"//analyse");
-
 }
 
+void MainWindow::trackAndMoveProcessWindow(QProcess *process, int timeoutMs)
+{
+    auto *timer = new QTimer(this);
+    auto elapsed = std::make_shared<QElapsedTimer>();
+    QPointer<QProcess> processGuard(process);
+    elapsed->start();
 
-void MainWindow::moveWindow(const wchar_t* windowName){
-    for (int i=0; i<=100; i++){
-        HWND hwnd = FindWindow(nullptr, windowName);
-
-        if (hwnd != nullptr) {
-            if(IsWindowVisible(hwnd)){
-                // Get the screen width
-                int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-                // Set the new position for the window (adjust the values as needed)
-                int newX =0; // move to the right half of the screen
-                int newY = 0;
-
-                // Move the window
-
-                MoveWindow(hwnd, newX, newY, screenWidth, screenHeight,true);// repaint the window
-               // File.remove();
-                break;
-                }
-            else{
-                Sleep(100);
-            }
+    connect(timer, &QTimer::timeout, this,
+            [timer, elapsed, processGuard, timeoutMs]() {
+        if (!processGuard) {
+            timer->stop();
+            timer->deleteLater();
+            return;
         }
-        else{
-            Sleep(100);
+        if (HWND window = findVisibleProcessWindow(processGuard->processId())) {
+            fillPrimaryScreen(window);
+            timer->stop();
+            timer->deleteLater();
+            return;
         }
-    }
+        if (elapsed->elapsed() >= timeoutMs
+            || processGuard->state() == QProcess::NotRunning) {
+            timer->stop();
+            timer->deleteLater();
+        }
+    });
+    timer->start(100);
 }
 
-void MainWindow::moveWindow(const wchar_t* windowName,QString dirname){
-    QDir Dir(dirname);
-    for( int i=0; i<=1500; i++){
-
-        if( Dir.exists()){
-            if(!Dir.isEmpty()){
-                HWND hwnd = FindWindow(nullptr, windowName);
-                if (hwnd != nullptr) {
-                        // Get the screen width
-                        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-                        // Set the new position for the window (adjust the values as needed)
-                        int newX = 0;
-                        int newY = 0;
-
-
-                        MoveWindow(hwnd, newX, newY, screenWidth, screenHeight,true);// repaint the window
-                       // File.remove();
-                        break;
-
-                  }
-                else{
-                    Sleep(100);
-                }
-
-            }
-            else
-                Sleep(100);
-
-        } else {
-            Sleep(100);
-
-        }
+void MainWindow::finishAnalysisProcess(QProcess *process, const QString &statusMessage)
+{
+    if (AnalyzerProcess != process) {
+        return;
     }
+    AnalyzerProcess = nullptr;
+    ui->pushButtonAnalyse->setEnabled(true);
+    ui->pushButtonAnalyse->setText(AnalyseButtonText);
+    statusBar()->showMessage(statusMessage, 5000);
+    process->deleteLater();
 }
 
 

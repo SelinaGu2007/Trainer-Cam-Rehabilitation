@@ -9,6 +9,8 @@
 #include <QListWidgetItem>
 #include <QShowEvent>
 #include <QMessageBox>
+#include <QPointer>
+#include <QProcess>
 #include <QStringList>
 #include "record.h"
 QT_BEGIN_NAMESPACE
@@ -23,8 +25,6 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     void displayListDirectory(const QString& directory);
-    void moveWindow(const wchar_t* windowName);
-    void moveWindow(const wchar_t* windowName,QString dirname);
 private slots:
     void on_pushButtonConnection_clicked();
 
@@ -44,8 +44,14 @@ private slots:
     void on_pushButtonAnalyse_clicked();
 
 private:
+    void trackAndMoveProcessWindow(QProcess *process, int timeoutMs);
+    void finishAnalysisProcess(QProcess *process, const QString &statusMessage);
+
     Ui::MainWindow *ui;
     ServerStuff *server;
+    QPointer<Record> RecordWindow;
+    QPointer<QProcess> AnalyzerProcess;
+    QString AnalyseButtonText;
     QString CustomerFolder;
     QString TutorFolder;
     QString VideoPlayerProgram;

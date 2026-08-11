@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 from assessment import create_assessment_report, score_errors, weighted_sequence
-from exercise_profile import load_profile
+from exercise_profile import ExerciseProfileError, load_profile
 from feedback_summary import create_feedback_summary
-from motion_data import load_legacy_frames, load_session_bodies, load_session_track
+from motion_data import MotionDataError, load_legacy_frames, load_session_bodies, load_session_track
 from motion_preprocessing import prepare_motion, prepared_to_bodies, retain_usable_frames
-from realtime_feedback import load_realtime_config, run_realtime_feedback
+from realtime_feedback import RealtimeFeedbackError, load_realtime_config, run_realtime_feedback
 from session_review import create_session_review
-from subject_tracking import load_tracking_config
+from subject_tracking import SubjectTrackingError, load_tracking_config
 
 try:
     import cv2
@@ -24,6 +24,19 @@ except ImportError:
     cv2 = None
 
 LOGGER = logging.getLogger("trainer_cam.analysis")
+
+EXIT_SUCCESS = 0
+EXIT_SESSION_QUALITY = 10
+EXIT_INVALID_INPUT = 20
+EXIT_INTERNAL_ERROR = 30
+
+
+class SessionQualityError(ValueError):
+    """The recording is readable but does not satisfy scoring quality gates."""
+
+
+class AnalysisInputError(ValueError):
+    """A command-line argument or requested input is invalid."""
 
 def getVector(B, A):
     """
@@ -285,18 +298,18 @@ def main():
     LOGGER.info("Starting analysis function=%s tutor=%s customer=%s", function, folder_tutor, folder_customer)
 
     if folder_tutor == "NULL" or folder_customer == "NULL":
-        raise ValueError("Please provide --folder_tutor and --folder_customer")
+        raise AnalysisInputError("Please provide --folder_tutor and --folder_customer")
     if not 0.0 <= args.min_required_coverage <= 1.0:
-        raise ValueError("--min-required-coverage must be between 0 and 1")
+        raise AnalysisInputError("--min-required-coverage must be between 0 and 1")
     if not 0.0 < args.min_frame_joint_fraction <= 1.0:
-        raise ValueError("--min-frame-joint-fraction must be in (0, 1]")
+        raise AnalysisInputError("--min-frame-joint-fraction must be in (0, 1]")
     profile = load_profile(args.profile)
     tracking_config = load_tracking_config(args.tracking_config)
     LOGGER.info("Using exercise profile id=%s source=%s", profile.profile_id, profile.source_path)
     LOGGER.info("Using subject tracking config source=%s", tracking_config.source_path)
     if function == "realtime":
         if args.live_max_wait_seconds <= 0:
-            raise ValueError("--live-max-wait-seconds must be positive")
+            raise AnalysisInputError("--live-max-wait-seconds must be positive")
         realtime_config = load_realtime_config(args.realtime_config)
         LOGGER.info("Using real-time feedback config source=%s", realtime_config.source_path)
         summary = run_realtime_feedback(
@@ -338,12 +351,12 @@ def main():
     for role, tracking in (("tutor", tracking_A), ("customer", tracking_B)):
         LOGGER.info("%s subject tracking: %s", role.capitalize(), tracking)
         if not tracking["gate_passed"]:
-            raise ValueError(
+            raise SessionQualityError(
                 f"{role} session failed subject tracking gates: "
                 + "; ".join(tracking["gate_failures"])
             )
     if not raw_bodies_A or not raw_bodies_B:
-        raise ValueError("Both recordings must contain at least one valid body frame")
+        raise SessionQualityError("Both recordings must contain at least one valid body frame")
     required_joints = profile.required_joints
     prepared_A = prepare_motion(
         raw_bodies_A,
@@ -365,16 +378,19 @@ def main():
     LOGGER.info("Customer motion quality: %s", quality_B)
     for role, quality in (("tutor", quality_A), ("customer", quality_B)):
         if quality["required_joint_coverage"] < args.min_required_coverage:
-            raise ValueError(
+            raise SessionQualityError(
                 f"{role} required joint coverage is too low: "
                 f"{quality['required_joint_coverage']:.1%}"
             )
-    prepared_A = retain_usable_frames(
-        prepared_A, required_joints, minimum_fraction=args.min_frame_joint_fraction
-    )
-    prepared_B = retain_usable_frames(
-        prepared_B, required_joints, minimum_fraction=args.min_frame_joint_fraction
-    )
+    try:
+        prepared_A = retain_usable_frames(
+            prepared_A, required_joints, minimum_fraction=args.min_frame_joint_fraction
+        )
+        prepared_B = retain_usable_frames(
+            prepared_B, required_joints, minimum_fraction=args.min_frame_joint_fraction
+        )
+    except ValueError as exc:
+        raise SessionQualityError(str(exc)) from exc
     quality_A["usable_frame_count"] = int(prepared_A.positions.shape[0])
     quality_B["usable_frame_count"] = int(prepared_B.positions.shape[0])
     if function == "quality":
@@ -486,16 +502,37 @@ def main():
             bodies_A[tutor_index].get("frame_index", tutor_index)
         )
         if customer_image is None or tutor_image is None:
-            raise FileNotFoundError("Comparison frame image is missing")
+            raise AnalysisInputError("Comparison frame image is missing")
         showImage(
             customer_image,
             tutor_image,
         )
     else:
-        raise ValueError("Unknown --function. Use: realtime, tracking, quality, artifacts, report, score, showVideos, showMaxDiffetence")
+        raise AnalysisInputError("Unknown --function. Use: realtime, tracking, quality, artifacts, report, score, showVideos, showMaxDiffetence")
 
-    return 0
+    return EXIT_SUCCESS
+
+
+def run_cli() -> int:
+    try:
+        return main()
+    except SessionQualityError as exc:
+        LOGGER.error("%s", exc)
+        return EXIT_SESSION_QUALITY
+    except (
+        AnalysisInputError,
+        FileNotFoundError,
+        MotionDataError,
+        ExerciseProfileError,
+        SubjectTrackingError,
+        RealtimeFeedbackError,
+    ) as exc:
+        LOGGER.error("%s", exc)
+        return EXIT_INVALID_INPUT
+    except Exception:
+        LOGGER.exception("Unexpected analyzer failure")
+        return EXIT_INTERNAL_ERROR
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(run_cli())

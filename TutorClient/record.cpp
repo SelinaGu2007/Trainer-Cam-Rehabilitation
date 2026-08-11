@@ -4,7 +4,7 @@
 #include <exception>
 #pragma comment(lib,"user32")
 Record::Record(QWidget *parent) :
-    QWidget(parent),
+    QWidget(parent, Qt::Window),
     ui(new Ui::Record)
 {
     ui->setupUi(this);
