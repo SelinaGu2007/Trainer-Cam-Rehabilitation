@@ -16,6 +16,19 @@
         "min_anchor_confidence": { "type": "integer", "minimum": 0, "maximum": 3 }
       }
     },
+    "reassociation": {
+      "type": "object",
+      "required": ["reassociation_max_distance_mm", "reassociation_max_scale_ratio", "reassociation_confirmation_frames", "temporary_loss_frames", "reinitialize_after_frames", "ambiguity_margin", "velocity_smoothing"],
+      "properties": {
+        "reassociation_max_distance_mm": { "type": "number", "exclusiveMinimum": 0 },
+        "reassociation_max_scale_ratio": { "type": "number", "minimum": 1 },
+        "reassociation_confirmation_frames": { "type": "integer", "minimum": 1 },
+        "temporary_loss_frames": { "type": "integer", "minimum": 0 },
+        "reinitialize_after_frames": { "type": "integer", "minimum": 1 },
+        "ambiguity_margin": { "type": "number", "minimum": 0 },
+        "velocity_smoothing": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
     "region_of_interest_mm": {
       "type": "object",
       "required": ["x", "z"],

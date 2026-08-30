@@ -6,6 +6,15 @@
     "lock_window_frames": 30,
     "min_anchor_confidence": 1
   },
+  "reassociation": {
+    "reassociation_max_distance_mm": 450,
+    "reassociation_max_scale_ratio": 1.35,
+    "reassociation_confirmation_frames": 3,
+    "temporary_loss_frames": 5,
+    "reinitialize_after_frames": 90,
+    "ambiguity_margin": 0.2,
+    "velocity_smoothing": 0.5
+  },
   "region_of_interest_mm": {
     "x": [-900, 900],
     "z": [700, 4000]

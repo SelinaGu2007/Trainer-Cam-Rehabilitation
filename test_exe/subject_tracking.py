@@ -29,6 +29,13 @@ class SubjectTrackingConfig:
     min_in_roi_fraction: float
     max_consecutive_missing_frames: int
     max_anchor_jump_mm: float
+    reassociation_max_distance_mm: float
+    reassociation_max_scale_ratio: float
+    reassociation_confirmation_frames: int
+    temporary_loss_frames: int
+    reinitialize_after_frames: int
+    ambiguity_margin: float
+    velocity_smoothing: float
     source_path: str
 
 
@@ -89,6 +96,7 @@ def parse_tracking_config(
     selection = raw.get("selection", {})
     roi = raw.get("region_of_interest_mm", {})
     gates = raw.get("session_gates", {})
+    reassociation = raw.get("reassociation", {})
     anchor_joint = int(selection.get("anchor_joint", 0))
     lock_window = int(selection.get("lock_window_frames", 30))
     min_confidence = int(selection.get("min_anchor_confidence", 1))
@@ -104,6 +112,23 @@ def parse_tracking_config(
         raise SubjectTrackingError("max_consecutive_missing_frames cannot be negative")
     if not math.isfinite(max_jump) or max_jump <= 0:
         raise SubjectTrackingError("max_anchor_jump_mm must be positive")
+    max_distance = float(reassociation.get("reassociation_max_distance_mm", 450.0))
+    max_scale_ratio = float(reassociation.get("reassociation_max_scale_ratio", 1.35))
+    confirmation_frames = int(reassociation.get("reassociation_confirmation_frames", 3))
+    temporary_loss_frames = int(reassociation.get("temporary_loss_frames", 5))
+    reinitialize_after_frames = int(reassociation.get("reinitialize_after_frames", 90))
+    ambiguity_margin = float(reassociation.get("ambiguity_margin", 0.2))
+    velocity_smoothing = float(reassociation.get("velocity_smoothing", 0.5))
+    if not math.isfinite(max_distance) or max_distance <= 0:
+        raise SubjectTrackingError("reassociation_max_distance_mm must be positive")
+    if not math.isfinite(max_scale_ratio) or max_scale_ratio < 1:
+        raise SubjectTrackingError("reassociation_max_scale_ratio must be at least 1")
+    if confirmation_frames < 1 or temporary_loss_frames < 0 or reinitialize_after_frames < 1:
+        raise SubjectTrackingError("reassociation frame thresholds are invalid")
+    if not math.isfinite(ambiguity_margin) or ambiguity_margin < 0:
+        raise SubjectTrackingError("ambiguity_margin cannot be negative")
+    if not 0 <= velocity_smoothing <= 1:
+        raise SubjectTrackingError("velocity_smoothing must be between 0 and 1")
     return SubjectTrackingConfig(
         anchor_joint=anchor_joint,
         lock_window_frames=lock_window,
@@ -114,6 +139,13 @@ def parse_tracking_config(
         min_in_roi_fraction=_bounded_fraction(gates, "min_in_roi_fraction"),
         max_consecutive_missing_frames=max_missing,
         max_anchor_jump_mm=max_jump,
+        reassociation_max_distance_mm=max_distance,
+        reassociation_max_scale_ratio=max_scale_ratio,
+        reassociation_confirmation_frames=confirmation_frames,
+        temporary_loss_frames=temporary_loss_frames,
+        reinitialize_after_frames=reinitialize_after_frames,
+        ambiguity_margin=ambiguity_margin,
+        velocity_smoothing=velocity_smoothing,
         source_path=source_path,
     )
 
@@ -199,6 +231,223 @@ def _maximum_missing_run(frames: Sequence[Dict[str, Any]], body_id: int) -> int:
     return maximum
 
 
+def _body_scale(body: Dict[str, Any], config: SubjectTrackingConfig) -> float | None:
+    confidence_available = any(
+        int(joint.get("confidence_level", 0)) > 0 for joint in body.get("joints", [])
+    )
+    left = _valid_position(_joint(body, 5), config.min_anchor_confidence, confidence_available)
+    right = _valid_position(_joint(body, 12), config.min_anchor_confidence, confidence_available)
+    if left is None or right is None:
+        return None
+    value = math.dist(left, right)
+    return value if math.isfinite(value) and value > 1e-6 else None
+
+
+def _initial_body_id(
+    frames: Sequence[Dict[str, Any]], config: SubjectTrackingConfig
+) -> int | None:
+    stats: Dict[int, Dict[str, float]] = {}
+    for frame in frames[: config.lock_window_frames]:
+        for body in frame.get("bodies", []):
+            identifier = int(body["body_id"])
+            anchor = body_anchor(body, config)
+            item = stats.setdefault(
+                identifier, {"seen": 0, "in_roi": 0, "confidence": 0, "distance": 0}
+            )
+            item["seen"] += 1
+            item["confidence"] += sum(
+                int(joint.get("confidence_level", 0)) for joint in body.get("joints", [])
+            )
+            if _in_roi(anchor, config):
+                item["in_roi"] += 1
+                center_x = (config.roi_x_mm[0] + config.roi_x_mm[1]) * 0.5
+                center_z = (config.roi_z_mm[0] + config.roi_z_mm[1]) * 0.5
+                item["distance"] += math.hypot(anchor[0] - center_x, anchor[2] - center_z)
+    eligible = [identifier for identifier, value in stats.items() if value["in_roi"] > 0]
+    if not eligible:
+        return None
+    return max(
+        eligible,
+        key=lambda identifier: (
+            stats[identifier]["in_roi"],
+            stats[identifier]["seen"],
+            stats[identifier]["confidence"],
+            -stats[identifier]["distance"],
+            -identifier,
+        ),
+    )
+
+
+class ActiveUserTracker:
+    """Stateful body-ID tracker with conservative spatial reassociation."""
+
+    def __init__(self, config: SubjectTrackingConfig, body_id: int | None = None) -> None:
+        self.config = config
+        self.initial_body_id = body_id
+        self.current_body_id = body_id
+        self.state = "LOCKED" if body_id is not None else "UNINITIALIZED"
+        self.last_anchor: List[float] | None = None
+        self.velocity = [0.0, 0.0, 0.0]
+        self.last_scale: float | None = None
+        self.lost_frames = 0
+        self.candidate_id: int | None = None
+        self.candidate_streak = 0
+        self.known_bystanders: set[int] = set()
+        self.body_id_history: List[int] = [] if body_id is None else [body_id]
+        self.transitions: List[Dict[str, Any]] = []
+        self.reassociation_count = 0
+        self.successful_recovery_count = 0
+        self.ambiguous_candidate_count = 0
+        self.rejected_switch_count = 0
+        self.lost_frame_count = 0
+        self.maximum_recovery_latency_frames = 0
+
+    def _transition(self, state: str, frame_index: int, reason: str) -> str | None:
+        if state == self.state:
+            return None
+        previous = self.state
+        self.state = state
+        self.transitions.append(
+            {"frame_index": int(frame_index), "from": previous, "to": state, "reason": reason}
+        )
+        return state.lower()
+
+    def _accept(self, body: Dict[str, Any], frame_index: int, recovered: bool) -> None:
+        anchor = body_anchor(body, self.config)
+        if anchor is not None:
+            if self.last_anchor is not None and not recovered:
+                delta = [right - left for left, right in zip(self.last_anchor, anchor)]
+                weight = self.config.velocity_smoothing
+                self.velocity = [
+                    weight * current + (1.0 - weight) * previous
+                    for current, previous in zip(delta, self.velocity)
+                ]
+            else:
+                self.velocity = [0.0, 0.0, 0.0]
+            self.last_anchor = anchor
+        scale = _body_scale(body, self.config)
+        if scale is not None:
+            self.last_scale = scale if self.last_scale is None else 0.8 * self.last_scale + 0.2 * scale
+        if recovered:
+            previous_id = self.current_body_id
+            self.current_body_id = int(body["body_id"])
+            self.reassociation_count += 1
+            self.successful_recovery_count += 1
+            self.maximum_recovery_latency_frames = max(
+                self.maximum_recovery_latency_frames, self.lost_frames
+            )
+            if previous_id != self.current_body_id:
+                self.body_id_history.append(self.current_body_id)
+        self.lost_frames = 0
+        self.candidate_id = None
+        self.candidate_streak = 0
+        self._transition("LOCKED", frame_index, "subject recovered" if recovered else "body ID observed")
+
+    def _candidate_cost(self, body: Dict[str, Any]) -> float | None:
+        anchor = body_anchor(body, self.config)
+        if anchor is None or not _in_roi(anchor, self.config) or self.last_anchor is None:
+            return None
+        predicted = [
+            value + velocity * min(self.lost_frames, self.config.temporary_loss_frames)
+            for value, velocity in zip(self.last_anchor, self.velocity)
+        ]
+        distance = math.dist(predicted, anchor)
+        if distance > self.config.reassociation_max_distance_mm:
+            return None
+        scale_penalty = 0.0
+        scale = _body_scale(body, self.config)
+        if self.last_scale is not None and scale is not None:
+            ratio = max(scale, self.last_scale) / min(scale, self.last_scale)
+            if ratio > self.config.reassociation_max_scale_ratio:
+                return None
+            scale_penalty = abs(math.log(ratio))
+        confidence = sum(int(joint.get("confidence_level", 0)) for joint in body.get("joints", []))
+        confidence_bonus = min(confidence / (32.0 * 3.0), 1.0) * 0.05
+        return distance / self.config.reassociation_max_distance_mm + scale_penalty - confidence_bonus
+
+    def update(self, frame: Dict[str, Any]) -> tuple[Dict[str, Any] | None, str | None]:
+        frame_index = int(frame.get("frame_index", 0))
+        bodies = frame.get("bodies", [])
+        if self.current_body_id is None:
+            return None, None
+        direct = next(
+            (body for body in bodies if int(body.get("body_id", -1)) == self.current_body_id),
+            None,
+        )
+        if direct is not None:
+            self.known_bystanders.update(
+                int(body.get("body_id", -1))
+                for body in bodies
+                if int(body.get("body_id", -1)) != self.current_body_id
+            )
+            recovered = self.lost_frames > 0
+            if recovered:
+                self.successful_recovery_count += 1
+                self.maximum_recovery_latency_frames = max(
+                    self.maximum_recovery_latency_frames, self.lost_frames
+                )
+            self._accept(direct, frame_index, recovered=False)
+            return direct, "tracking_recovered" if recovered else None
+
+        self.lost_frames += 1
+        self.lost_frame_count += 1
+        state = "TEMPORARILY_LOST"
+        if self.lost_frames > self.config.temporary_loss_frames:
+            state = "REASSOCIATING"
+        if self.lost_frames > self.config.reinitialize_after_frames:
+            state = "LOST"
+        transition = self._transition(state, frame_index, "locked body ID missing")
+
+        if self.lost_frames <= self.config.temporary_loss_frames:
+            return None, transition
+
+        candidates = []
+        for body in bodies:
+            identifier = int(body.get("body_id", -1))
+            if identifier in self.known_bystanders:
+                self.rejected_switch_count += 1
+                continue
+            cost = self._candidate_cost(body)
+            if cost is not None:
+                candidates.append((cost, identifier, body))
+        candidates.sort(key=lambda item: (item[0], item[1]))
+        if len(candidates) > 1 and candidates[1][0] - candidates[0][0] < self.config.ambiguity_margin:
+            self.ambiguous_candidate_count += 1
+            self.candidate_id = None
+            self.candidate_streak = 0
+            return None, transition or "ambiguous_candidate"
+        if not candidates:
+            self.candidate_id = None
+            self.candidate_streak = 0
+            return None, transition
+        _, identifier, candidate = candidates[0]
+        if identifier == self.candidate_id:
+            self.candidate_streak += 1
+        else:
+            self.candidate_id = identifier
+            self.candidate_streak = 1
+        if self.candidate_streak < self.config.reassociation_confirmation_frames:
+            return None, transition
+        self._accept(candidate, frame_index, recovered=True)
+        return candidate, "tracking_recovered"
+
+    def diagnostics(self) -> Dict[str, Any]:
+        return {
+            "initial_body_id": self.initial_body_id,
+            "current_body_id": self.current_body_id,
+            "final_body_id": self.current_body_id,
+            "body_id_history": self.body_id_history,
+            "reassociation_count": self.reassociation_count,
+            "successful_recovery_count": self.successful_recovery_count,
+            "ambiguous_candidate_count": self.ambiguous_candidate_count,
+            "rejected_switch_count": self.rejected_switch_count,
+            "lost_frame_count": self.lost_frame_count,
+            "maximum_recovery_latency_frames": self.maximum_recovery_latency_frames,
+            "tracker_state": self.state,
+            "state_transitions": self.transitions,
+        }
+
+
 def select_subject_track(
     frames: Sequence[Dict[str, Any]],
     config: SubjectTrackingConfig,
@@ -206,35 +455,10 @@ def select_subject_track(
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     if not frames:
         return [], {"gate_passed": False, "gate_failures": ["recording has no frames"]}
-    lock_frames = frames[: config.lock_window_frames]
-    stats: Dict[int, Dict[str, float]] = {}
-    for frame in lock_frames:
-        for body in frame.get("bodies", []):
-            identifier = int(body["body_id"])
-            anchor = body_anchor(body, config)
-            item = stats.setdefault(identifier, {"seen": 0, "in_roi": 0, "confidence": 0, "distance": 0})
-            item["seen"] += 1
-            item["confidence"] += sum(int(joint.get("confidence_level", 0)) for joint in body.get("joints", []))
-            if _in_roi(anchor, config):
-                item["in_roi"] += 1
-                center_x = (config.roi_x_mm[0] + config.roi_x_mm[1]) * 0.5
-                center_z = (config.roi_z_mm[0] + config.roi_z_mm[1]) * 0.5
-                item["distance"] += math.hypot(anchor[0] - center_x, anchor[2] - center_z)
-
     selection_reason = "explicit-body-id" if body_id is not None else "initial-roi-lock"
-    if body_id is None and stats:
-        eligible = [identifier for identifier, value in stats.items() if value["in_roi"] > 0]
-        if eligible:
-            body_id = max(
-                eligible,
-                key=lambda identifier: (
-                    stats[identifier]["in_roi"],
-                    stats[identifier]["seen"],
-                    stats[identifier]["confidence"],
-                    -stats[identifier]["distance"],
-                    -identifier,
-                ),
-            )
+    if body_id is None:
+        body_id = _initial_body_id(frames, config)
+    tracker = ActiveUserTracker(config, body_id)
 
     selected: List[Dict[str, Any]] = []
     anchors: List[List[float]] = []
@@ -247,10 +471,7 @@ def select_subject_track(
             frames_with_multiple += 1
         bodies_in_roi = sum(_in_roi(body_anchor(body, config), config) for body in bodies)
         max_bodies_in_roi = max(max_bodies_in_roi, bodies_in_roi)
-        match = next(
-            (body for body in bodies if body_id is not None and int(body["body_id"]) == body_id),
-            None,
-        )
+        match, _ = tracker.update(frame)
         if match is None:
             continue
         anchor = body_anchor(match, config)
@@ -269,7 +490,12 @@ def select_subject_track(
     frame_count = len(frames)
     track_coverage = len(selected) / frame_count
     in_roi_fraction = in_roi_count / len(selected) if selected else 0.0
-    missing_run = _maximum_missing_run(frames, body_id) if body_id is not None else frame_count
+    present_indices = {int(body["frame_index"]) for body in selected}
+    missing_run = maximum = 0
+    for frame in frames:
+        missing_run = 0 if int(frame["frame_index"]) in present_indices else missing_run + 1
+        maximum = max(maximum, missing_run)
+    missing_run = maximum
     jumps = [math.dist(left, right) for left, right in zip(anchors[:-1], anchors[1:])]
     max_jump = max(jumps, default=0.0)
     failures = []
@@ -312,4 +538,5 @@ def select_subject_track(
         "gate_failures": failures,
         "warnings": warnings,
     }
+    report.update(tracker.diagnostics())
     return selected, report

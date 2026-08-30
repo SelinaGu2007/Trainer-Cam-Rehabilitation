@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainercam.local/schemas/robustness-report-v1.schema.json",
+  "title": "TrainerCam synthetic robustness report",
+  "type": "object",
+  "required": ["format", "schema_version", "created_at", "summary", "metrics", "scenarios", "limitations"],
+  "properties": {
+    "format": { "const": "trainercam.robustness-report" },
+    "schema_version": { "const": 1 },
+    "created_at": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["passed", "scenario_count", "passed_count"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "scenario_count": { "type": "integer", "minimum": 1 },
+        "passed_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": { "type": "object" },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "passed", "metrics"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "passed": { "type": "boolean" },
+          "metrics": { "type": "object" }
+        }
+      }
+    },
+    "limitations": { "type": "object" }
+  }
+}

@@ -26,6 +26,17 @@
         "tracking_warning_frames": { "type": "integer", "minimum": 1 }
       }
     },
+    "joint_filter": {
+      "type": "object",
+      "required": ["ema_alpha_high_confidence", "ema_alpha_low_confidence", "maximum_hold_frames", "maximum_joint_speed_body_scales_per_second", "recovery_blend_frames"],
+      "properties": {
+        "ema_alpha_high_confidence": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "ema_alpha_low_confidence": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "maximum_hold_frames": { "type": "integer", "minimum": 0 },
+        "maximum_joint_speed_body_scales_per_second": { "type": "number", "exclusiveMinimum": 0 },
+        "recovery_blend_frames": { "type": "integer", "minimum": 0 }
+      }
+    },
     "runtime": {
       "type": "object",
       "required": ["poll_interval_ms", "startup_timeout_sec", "completion_marker"],

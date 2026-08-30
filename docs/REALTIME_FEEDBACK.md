@@ -11,11 +11,12 @@ This is an engineering feedback aid, not a medical alarm or a clinically validat
 1. The customer selects a tutor demonstration and starts recording.
 2. CustomerClient starts the recorder, tutor playback, and real-time analyser together.
 3. The analyser prepares the tutor trajectory once.
-4. It waits for the initial subject-lock window, then retains one Azure Kinect body ID.
+4. It waits for the initial subject-lock window, then runs the shared active-user state machine and conservatively reassociates compatible new IDs.
 5. Each new customer pose searches only a small forward/backward window of the tutor trajectory. This online alignment avoids rerunning full DTW for every frame.
-6. Per-feature angular errors use the same exercise profile, weights, tolerances, and messages as the post-session report.
-7. A correction is emitted only after the same problem persists for several frames. A cooldown prevents repeated message spam, and several good frames clear an active warning.
-8. The recorder writes `recording.complete` after all motion data is flushed. The analyser then writes its summary and exits.
+6. Customer joints pass through confidence-aware EMA, bounded hold/prediction and body-scale-relative outlier rejection.
+7. Per-feature angular errors use the same exercise profile, weights, tolerances, and messages as the post-session report.
+8. A correction is emitted only after the same problem persists for several frames. A cooldown prevents repeated message spam, and several good frames clear an active warning.
+9. The recorder writes `recording.complete` after all motion data is flushed. The analyser then writes its summary and exits.
 
 ## Outputs
 
@@ -30,6 +31,8 @@ Event statuses are:
 - `adjust`: a persistent named feature error needs correction;
 - `correct`: a previous error returned to the configured range;
 - `tracking`: the locked trainee or required joints are not visible.
+
+Tracking events retain the compatible `status: tracking` value and add an `event_type`: `multiple_people`, `tracking_temporarily_lost`, `tracking_recovered`, `tracking_lost`, `required_joints_occluded`, `move_closer`, `step_back`, or `stand_in_training_region`. Distance feedback uses a 100 mm recovery margin so it does not flash at the configured Z boundary.
 
 Events and summaries conform to `schemas/realtime-feedback-event-v1.schema.json` and `schemas/realtime-feedback-summary-v1.schema.json`.
 

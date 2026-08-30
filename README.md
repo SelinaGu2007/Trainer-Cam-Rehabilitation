@@ -2,7 +2,7 @@
 
 TrainerCam is a rehabilitation exercise coaching prototype that records human motion with Azure Kinect, extracts 3D skeleton joints, compares a user's movement with a tutor demonstration, and visualizes motion differences.
 
-> **Current implementation scope:** this repository provides modular Azure Kinect live/MKV capture, Qt tutor/customer prototypes, persistent body-ID locking with session gates, confidence-aware preprocessing, streaming corrective feedback, configurable offline DTW assessment, structured scoring reports, aligned post-session movement review, user-controlled voice feedback, and reproducible engineering acceptance evidence. RGB/mobile capture, target-room hardware validation and clinically calibrated profiles remain planned work rather than completed capabilities.
+> **Current implementation scope:** this repository provides modular Azure Kinect live/MKV capture, Qt tutor/customer prototypes, stateful active-user tracking with conservative body-ID reassociation, confidence-aware online joint filtering and offline preprocessing, streaming corrective feedback, configurable offline DTW assessment, structured scoring reports, aligned post-session movement review, user-controlled voice feedback, and reproducible engineering acceptance evidence. RGB/mobile capture, target-room hardware validation and clinically calibrated profiles remain planned work rather than completed capabilities.
 
 ![Motion analysis visualization](docs/motion_analysis.png)
 
@@ -43,8 +43,8 @@ The motion-comparison pipeline consists of the following steps:
 
 1. Capture RGB frames and 3D body-joint coordinates using Azure Kinect Body Tracking.
 2. Extract angle-based motion features from selected body joints.
-3. Lock one subject inside the configured training region and reject unstable sessions.
-4. Repair short low-confidence gaps and reject unusable frames.
+3. Lock one subject inside the configured training region, conservatively recover compatible new body IDs, and reject unstable sessions.
+4. Filter live joint jitter, repair short low-confidence gaps and reject unusable frames.
 5. Normalize the skeleton by body origin, scale, and torso orientation.
 6. Smooth motion trajectories using a Gaussian filter.
 7. Align tutor and user sequences with Dynamic Time Warping.
@@ -165,6 +165,8 @@ This validates configuration, compiles the Python sources, runs unit tests, and 
 
 For a machine-readable end-to-end release gate, deterministic artifact hashes, privacy checks and explicit validation limitations, run `python scripts/run_acceptance.py`. See [docs/ENGINEERING_ACCEPTANCE.md](docs/ENGINEERING_ACCEPTANCE.md).
 
+For deterministic multi-person, ID-recovery, jitter, outlier and occlusion scenarios, run `python scripts/run_robustness_evaluation.py`. Its machine-readable report is written under `artifacts/`; see [docs/ROBUSTNESS_EVALUATION.md](docs/ROBUSTNESS_EVALUATION.md). These scenarios are synthetic engineering evidence, not real-hardware or clinical validation.
+
 ### 1. Install dependencies
 
 ```bash
@@ -197,7 +199,7 @@ The generated visualization frames are saved under:
 
 The confidence handling, missing-joint repair, body normalisation and quality gates are documented in [docs/MOTION_PREPROCESSING.md](docs/MOTION_PREPROCESSING.md).
 
-Persistent body-ID locking, the configurable training region, multi-person diagnostics, and pre-score session gates are documented in [docs/SUBJECT_TRACKING.md](docs/SUBJECT_TRACKING.md).
+Stateful body-ID locking and reassociation, the configurable training region, multi-person diagnostics, and pre-score session gates are documented in [docs/SUBJECT_TRACKING.md](docs/SUBJECT_TRACKING.md).
 
 Online reference alignment, feedback hysteresis/cooldown, live overlays, event files, and latency measurement are documented in [docs/REALTIME_FEEDBACK.md](docs/REALTIME_FEEDBACK.md).
 

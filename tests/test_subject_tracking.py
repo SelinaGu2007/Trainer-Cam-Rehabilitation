@@ -98,6 +98,72 @@ class SubjectTrackingTests(unittest.TestCase):
         self.assertEqual({body["body_id"] for body in selected}, {20})
         self.assertEqual(report["selection_reason"], "explicit-body-id")
 
+    def test_new_id_is_reassociated_after_spatial_confirmation(self):
+        config = dataclasses.replace(
+            self.config,
+            lock_window_frames=2,
+            temporary_loss_frames=1,
+            reassociation_confirmation_frames=2,
+        )
+        frames = [
+            make_frame(0, [make_body(10, x=0)]),
+            make_frame(1, [make_body(10, x=10)]),
+            make_frame(2, []),
+            make_frame(3, [make_body(30, x=20)]),
+            make_frame(4, [make_body(30, x=25)]),
+        ]
+        selected, report = subject_tracking.select_subject_track(frames, config)
+        self.assertEqual([body["body_id"] for body in selected], [10, 10, 30])
+        self.assertEqual(report["body_id_history"], [10, 30])
+        self.assertEqual(report["reassociation_count"], 1)
+
+    def test_single_frame_candidate_does_not_trigger_reassociation(self):
+        config = dataclasses.replace(
+            self.config,
+            lock_window_frames=2,
+            temporary_loss_frames=0,
+            reassociation_confirmation_frames=2,
+        )
+        frames = [
+            make_frame(0, [make_body(10)]),
+            make_frame(1, [make_body(10)]),
+            make_frame(2, [make_body(30, x=20)]),
+            make_frame(3, []),
+        ]
+        selected, report = subject_tracking.select_subject_track(frames, config)
+        self.assertEqual({body["body_id"] for body in selected}, {10})
+        self.assertEqual(report["reassociation_count"], 0)
+
+    def test_ambiguous_new_ids_are_rejected(self):
+        config = dataclasses.replace(
+            self.config,
+            lock_window_frames=2,
+            temporary_loss_frames=0,
+            reassociation_confirmation_frames=1,
+            ambiguity_margin=0.5,
+        )
+        frames = [
+            make_frame(0, [make_body(10)]),
+            make_frame(1, [make_body(10)]),
+            make_frame(2, [make_body(30, x=20), make_body(40, x=25)]),
+        ]
+        selected, report = subject_tracking.select_subject_track(frames, config)
+        self.assertEqual({body["body_id"] for body in selected}, {10})
+        self.assertGreater(report["ambiguous_candidate_count"], 0)
+
+    def test_distant_new_id_is_rejected(self):
+        config = dataclasses.replace(
+            self.config,
+            lock_window_frames=2,
+            temporary_loss_frames=0,
+            reassociation_confirmation_frames=1,
+        )
+        tracker = subject_tracking.ActiveUserTracker(config, 10)
+        tracker.update(make_frame(0, [make_body(10, x=0)]))
+        body, _ = tracker.update(make_frame(1, [make_body(30, x=850)]))
+        self.assertIsNone(body)
+        self.assertEqual(tracker.reassociation_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

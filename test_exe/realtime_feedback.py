@@ -15,9 +15,10 @@ import numpy as np
 
 from assessment import AXIS_INDEX, score_errors, weighted_sequence
 from exercise_profile import ExerciseProfile
+from joint_filter import JointFilterBank, JointFilterConfig
 from motion_data import FRAMES_NAME, load_session_track
 from motion_preprocessing import prepare_motion, retain_usable_frames
-from subject_tracking import SubjectTrackingConfig, select_subject_track
+from subject_tracking import ActiveUserTracker, SubjectTrackingConfig, body_anchor, select_subject_track
 
 
 CONFIG_FORMAT = "trainercam.realtime-feedback-config"
@@ -40,6 +41,7 @@ class RealtimeFeedbackConfig:
     minimum_good_frames: int
     cooldown_ms: int
     tracking_warning_frames: int
+    joint_filter: JointFilterConfig
     poll_interval_ms: int
     startup_timeout_sec: float
     completion_marker: str
@@ -91,6 +93,7 @@ def parse_realtime_config(
     alignment = raw.get("alignment", {})
     feedback = raw.get("feedback", {})
     runtime = raw.get("runtime", {})
+    filtering = raw.get("joint_filter", {})
     smoothing = float(alignment.get("reference_smoothing_sigma", 0.0))
     startup_timeout = float(runtime.get("startup_timeout_sec", 30.0))
     marker = str(runtime.get("completion_marker", "")).strip()
@@ -100,6 +103,19 @@ def parse_realtime_config(
         raise RealtimeFeedbackError("startup_timeout_sec must be positive")
     if not marker or Path(marker).name != marker:
         raise RealtimeFeedbackError("completion_marker must be a file name")
+    joint_filter = JointFilterConfig(
+        ema_alpha_high_confidence=float(filtering.get("ema_alpha_high_confidence", 0.65)),
+        ema_alpha_low_confidence=float(filtering.get("ema_alpha_low_confidence", 0.25)),
+        maximum_hold_frames=int(filtering.get("maximum_hold_frames", 3)),
+        maximum_joint_speed_body_scales_per_second=float(
+            filtering.get("maximum_joint_speed_body_scales_per_second", 8.0)
+        ),
+        recovery_blend_frames=int(filtering.get("recovery_blend_frames", 3)),
+    )
+    try:
+        JointFilterBank(joint_filter)
+    except ValueError as exc:
+        raise RealtimeFeedbackError(str(exc)) from exc
     return RealtimeFeedbackConfig(
         lookahead_frames=_integer(alignment, "lookahead_frames", 1),
         backtrack_frames=_integer(alignment, "backtrack_frames", 0),
@@ -108,6 +124,7 @@ def parse_realtime_config(
         minimum_good_frames=_integer(feedback, "minimum_good_frames", 1),
         cooldown_ms=_integer(feedback, "cooldown_ms", 0),
         tracking_warning_frames=_integer(feedback, "tracking_warning_frames", 1),
+        joint_filter=joint_filter,
         poll_interval_ms=_integer(runtime, "poll_interval_ms", 10),
         startup_timeout_sec=startup_timeout,
         completion_marker=marker,
@@ -211,11 +228,17 @@ class RealtimeFeedbackEngine:
         }
 
     def tracking_event(
-        self, frame_index: int, timestamp_usec: int | None, message: str
+        self,
+        frame_index: int,
+        timestamp_usec: int | None,
+        message: str,
+        event_type: str = "tracking_temporarily_lost",
     ) -> Dict[str, Any]:
-        return self._event(
+        event = self._event(
             "tracking", frame_index, timestamp_usec, message, time.perf_counter()
         )
+        event["event_type"] = event_type
+        return event
 
     def evaluate(
         self,
@@ -386,53 +409,90 @@ def run_realtime_feedback(
         time.sleep(realtime_config.poll_interval_ms / 1000.0)
 
     buffer: List[Dict[str, Any]] = []
-    locked_body_id: int | None = None
+    tracker: ActiveUserTracker | None = None
+    joint_filter = JointFilterBank(realtime_config.joint_filter)
     processed_indices = set()
-    missing_streak = 0
     last_tracking_warning = -1
+    last_multiple_warning = -1
+    distance_state = "inside"
     event_counts = {"adjust": 0, "correct": 0, "tracking": 0}
 
     def process_frame(frame: Dict[str, Any], stream) -> None:
-        nonlocal missing_streak, last_tracking_warning
-        if frame["frame_index"] in processed_indices or locked_body_id is None:
+        nonlocal last_tracking_warning, last_multiple_warning, distance_state
+        if frame["frame_index"] in processed_indices or tracker is None:
             return
         processed_indices.add(frame["frame_index"])
-        body = next(
-            (body for body in frame.get("bodies", []) if int(body.get("body_id", -1)) == locked_body_id),
-            None,
-        )
+        body, tracking_change = tracker.update(frame)
         event = None
+        if len(frame.get("bodies", [])) > 1 and (
+            frame["frame_index"] - last_multiple_warning >= realtime_config.tracking_warning_frames
+        ):
+            event = engine.tracking_event(
+                frame["frame_index"], frame.get("timestamp_usec"),
+                "Multiple people are visible. The current trainee remains locked.",
+                "multiple_people",
+            )
+            last_multiple_warning = frame["frame_index"]
         if body is None:
-            missing_streak += 1
             if (
-                missing_streak >= realtime_config.tracking_warning_frames
+                tracker.lost_frames >= realtime_config.tracking_warning_frames
                 and frame["frame_index"] - last_tracking_warning >= realtime_config.tracking_warning_frames
             ):
+                event_type = "tracking_lost" if tracker.state == "LOST" else "tracking_temporarily_lost"
                 event = engine.tracking_event(
                     frame["frame_index"], frame.get("timestamp_usec"),
-                    "The locked trainee is not visible. Return to the training region."
+                    "The locked trainee is not visible. Return to the training region.",
+                    event_type,
                 )
                 last_tracking_warning = frame["frame_index"]
         else:
-            missing_streak = 0
+            if tracking_change == "tracking_recovered":
+                event = engine.tracking_event(
+                    frame["frame_index"], frame.get("timestamp_usec"),
+                    "Trainee tracking recovered.", "tracking_recovered"
+                )
             value = dict(body)
             value.update(
                 frame_index=frame["frame_index"],
                 timestamp_usec=frame.get("timestamp_usec"),
                 image=frame.get("image"),
             )
-            prepared = prepare_motion([value], max_interpolation_gap=0)
+            filtered, filter_quality = joint_filter.update(value, frame.get("timestamp_usec"))
+            prepared = prepare_motion([filtered], max_interpolation_gap=0)
             coverage = prepared.coverage(profile.required_joints)
             if coverage < 1.0:
                 event = engine.tracking_event(
                     frame["frame_index"], frame.get("timestamp_usec"),
-                    "Keep the configured body joints visible to continue feedback."
+                    "Keep the configured body joints visible to continue feedback.",
+                    "required_joints_occluded",
                 )
             else:
+                anchor = body_anchor(body, tracking_config)
+                next_distance_state = distance_state
+                if anchor is not None and distance_state == "inside" and anchor[2] < tracking_config.roi_z_mm[0]:
+                    next_distance_state = "too_close"
+                elif anchor is not None and distance_state == "inside" and anchor[2] > tracking_config.roi_z_mm[1]:
+                    next_distance_state = "too_far"
+                elif anchor is not None and distance_state == "too_close" and anchor[2] >= tracking_config.roi_z_mm[0] + 100:
+                    next_distance_state = "inside"
+                elif anchor is not None and distance_state == "too_far" and anchor[2] <= tracking_config.roi_z_mm[1] - 100:
+                    next_distance_state = "inside"
+                if next_distance_state == "too_close" and next_distance_state != distance_state:
+                    event = engine.tracking_event(
+                        frame["frame_index"], frame.get("timestamp_usec"),
+                        "Step back to remain inside the training region.", "step_back"
+                    )
+                elif next_distance_state == "too_far" and next_distance_state != distance_state:
+                    event = engine.tracking_event(
+                        frame["frame_index"], frame.get("timestamp_usec"),
+                        "Move closer to remain inside the training region.", "move_closer"
+                    )
+                distance_state = next_distance_state
                 angles = angles_from_positions(prepared.positions, profile)[0]
-                event = engine.evaluate(
-                    angles, frame["frame_index"], frame.get("timestamp_usec")
-                )
+                if event is None:
+                    event = engine.evaluate(
+                        angles, frame["frame_index"], frame.get("timestamp_usec")
+                    )
         if event is not None:
             event_counts[event["status"]] += 1
             _write_event(stream, event)
@@ -453,11 +513,12 @@ def run_realtime_feedback(
                         time.sleep(realtime_config.poll_interval_ms / 1000.0)
                         continue
                     buffer.append(frame)
-                    if locked_body_id is None and len(buffer) >= tracking_config.lock_window_frames:
+                    if tracker is None and len(buffer) >= tracking_config.lock_window_frames:
                         lock_candidates = buffer[-tracking_config.lock_window_frames :]
                         _, report = select_subject_track(lock_candidates, tracking_config)
-                        locked_body_id = report.get("selected_body_id")
-                        if locked_body_id is not None:
+                        initial_body_id = report.get("selected_body_id")
+                        if initial_body_id is not None:
+                            tracker = ActiveUserTracker(tracking_config, initial_body_id)
                             for buffered in buffer:
                                 process_frame(buffered, event_stream)
                         elif (
@@ -467,22 +528,24 @@ def run_realtime_feedback(
                             event = engine.tracking_event(
                                 frame["frame_index"], frame.get("timestamp_usec"),
                                 "Stand inside the configured training region to start feedback.",
+                                "stand_in_training_region",
                             )
                             event_counts["tracking"] += 1
                             _write_event(event_stream, event)
                             overlay.update(customer, frame, event)
                             last_tracking_warning = frame["frame_index"]
-                    elif locked_body_id is not None:
+                    elif tracker is not None:
                         process_frame(frame, event_stream)
                     continue
 
                 completed = completion_path.is_file()
                 if completed:
-                    if locked_body_id is None and buffer:
+                    if tracker is None and buffer:
                         lock_candidates = buffer[-tracking_config.lock_window_frames :]
                         _, report = select_subject_track(lock_candidates, tracking_config)
-                        locked_body_id = report.get("selected_body_id")
-                        if locked_body_id is not None:
+                        initial_body_id = report.get("selected_body_id")
+                        if initial_body_id is not None:
+                            tracker = ActiveUserTracker(tracking_config, initial_body_id)
                             for buffered in buffer:
                                 process_frame(buffered, event_stream)
                         else:
@@ -490,6 +553,7 @@ def run_realtime_feedback(
                                 buffer[-1]["frame_index"],
                                 buffer[-1].get("timestamp_usec"),
                                 "No trainee could be locked inside the training region.",
+                                "stand_in_training_region",
                             )
                             event_counts["tracking"] += 1
                             _write_event(event_stream, event)
@@ -506,8 +570,8 @@ def run_realtime_feedback(
         "format": SUMMARY_FORMAT,
         "schema_version": 1,
         "created_at": _created_at(),
-        "selected_body_id": locked_body_id,
-        "subject_locked": locked_body_id is not None,
+        "selected_body_id": tracker.current_body_id if tracker is not None else None,
+        "subject_locked": tracker is not None and tracker.current_body_id is not None,
         "processed_frame_count": len(processed_indices),
         "event_counts": event_counts,
         "processing_latency_ms": {
@@ -516,6 +580,10 @@ def run_realtime_feedback(
             "maximum": round(float(np.max(latencies)), 3) if latencies.size else None,
         },
         "output_file": output.name,
+        "subject_tracking": tracker.diagnostics() if tracker is not None else None,
+        "joint_filter": {
+            "outlier_rejection_count": joint_filter.outlier_rejection_count,
+        },
     }
     summary.parent.mkdir(parents=True, exist_ok=True)
     summary.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

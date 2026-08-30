@@ -2,6 +2,21 @@
 
 Raw joint coordinates are not compared directly. The same exercise can be recorded at a different place, distance, body size, or camera-facing angle, and Azure Kinect may briefly lose a joint. The preprocessing layer converts one selected body track into a stable comparison sequence before feature extraction and DTW.
 
+Streaming customer frames additionally pass through a stateful `JointFilterBank` before body normalisation and angle extraction. This is separate from offline gap interpolation and Gaussian angle smoothing.
+
+## Online joint filtering
+
+Each joint has independent position, velocity, confidence and missing-frame state. High-confidence observations update the EMA more strongly; low-confidence observations update it conservatively. Short unavailable periods use bounded velocity prediction, while longer gaps become unavailable. A body-scale-relative speed gate rejects implausible jumps without contaminating filter state, and recovered joints blend back over several frames.
+
+The defaults live under `joint_filter` in `config/realtime_feedback.json`:
+
+- high/low-confidence EMA alpha;
+- maximum hold frames;
+- maximum joint speed in body scales per second;
+- recovery blend frames.
+
+Filter output records whether each joint is valid, predicted or rejected. The live summary records the cumulative outlier count.
+
 ## Pipeline
 
 ```text

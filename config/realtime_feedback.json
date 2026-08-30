@@ -12,6 +12,13 @@
     "cooldown_ms": 1200,
     "tracking_warning_frames": 5
   },
+  "joint_filter": {
+    "ema_alpha_high_confidence": 0.65,
+    "ema_alpha_low_confidence": 0.25,
+    "maximum_hold_frames": 3,
+    "maximum_joint_speed_body_scales_per_second": 8.0,
+    "recovery_blend_frames": 3
+  },
   "runtime": {
     "poll_interval_ms": 50,
     "startup_timeout_sec": 30,
