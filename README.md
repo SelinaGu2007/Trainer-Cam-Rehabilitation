@@ -165,7 +165,7 @@ This validates configuration, compiles the Python sources, runs unit tests, and 
 
 For a machine-readable end-to-end release gate, deterministic artifact hashes, privacy checks and explicit validation limitations, run `python scripts/run_acceptance.py`. See [docs/ENGINEERING_ACCEPTANCE.md](docs/ENGINEERING_ACCEPTANCE.md).
 
-For deterministic multi-person, ID-recovery, jitter, outlier and occlusion scenarios, run `python scripts/run_robustness_evaluation.py`. Its machine-readable report is written under `artifacts/`; see [docs/ROBUSTNESS_EVALUATION.md](docs/ROBUSTNESS_EVALUATION.md). These scenarios are synthetic engineering evidence, not real-hardware or clinical validation.
+For deterministic multi-person, ID-recovery, jitter, outlier and occlusion scenarios, run `python scripts/run_robustness_evaluation.py`. Its machine-readable report is written under `artifacts/`; see [docs/ROBUSTNESS_EVALUATION.md](docs/ROBUSTNESS_EVALUATION.md). The baseline and Release scripts require this gate to pass. These scenarios are synthetic engineering evidence, not real-hardware or clinical validation.
 
 ### 1. Install dependencies
 

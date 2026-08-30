@@ -40,6 +40,7 @@ try {
     $null = Get-Content -Raw -Encoding UTF8 "schemas\acceptance-config-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\acceptance-report-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "schemas\release-manifest-v1.schema.json" | ConvertFrom-Json
+    $null = Get-Content -Raw -Encoding UTF8 "schemas\robustness-report-v1.schema.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\exercises\arm_raise.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\subject_tracking.json" | ConvertFrom-Json
     $null = Get-Content -Raw -Encoding UTF8 "config\realtime_feedback.json" | ConvertFrom-Json
@@ -52,6 +53,7 @@ try {
             "test_exe\assessment.py" `
             "test_exe\exercise_profile.py" `
             "test_exe\subject_tracking.py" `
+            "test_exe\joint_filter.py" `
             "test_exe\realtime_feedback.py" `
             "test_exe\feedback_summary.py" `
             "test_exe\session_review.py" `
@@ -63,6 +65,7 @@ try {
             "show_videos\showvideo.py" `
             "scripts\migrate_motion_data.py" `
             "scripts\run_acceptance.py" `
+            "scripts\run_robustness_evaluation.py" `
             "scripts\create_release_manifest.py"
     } "Python source compilation failed."
 
@@ -70,6 +73,12 @@ try {
     Invoke-Checked {
         & $PythonCommand -m unittest discover -s tests -v
     } "Offline analysis tests failed."
+
+    Write-Host "Running synthetic robustness release gate..."
+    Invoke-Checked {
+        & $PythonCommand "scripts\run_robustness_evaluation.py" `
+            "--output" "artifacts\robustness-report.json"
+    } "Synthetic robustness evaluation failed. Release is blocked."
 
     $VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (-not (Test-Path -LiteralPath $VsWhere)) {
@@ -88,7 +97,7 @@ try {
         throw "Azure Kinect sample helper sources are incomplete."
     }
 
-    Write-Host "Offline reproducibility baseline passed."
+    Write-Host "Offline reproducibility and robustness baseline passed."
 } finally {
     Pop-Location
 }

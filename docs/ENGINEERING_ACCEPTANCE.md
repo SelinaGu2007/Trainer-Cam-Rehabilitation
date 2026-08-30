@@ -28,11 +28,11 @@ The suite currently verifies:
 
 The performance check is for regression detection on a four-frame synthetic fixture. It is not the approximately 200 ms live-feedback measurement and is not a hardware performance guarantee.
 
-The release gate is complemented by `python scripts/run_robustness_evaluation.py`, which exercises ten deterministic tracking/filter scenarios and writes `trainercam.robustness-report` version 1. The robustness report remains synthetic evidence and does not change the hardware or clinical limitations below.
+The release gate also runs `python scripts/run_robustness_evaluation.py`, which exercises ten deterministic tracking/filter scenarios and writes `trainercam.robustness-report` version 1. Any failed scenario returns non-zero and blocks the Release build before native compilation. The robustness report remains synthetic evidence and does not change the hardware or clinical limitations below.
 
 ## Release build integration
 
-`scripts/build_release.ps1` now requires the complete baseline/unit-test script and the acceptance suite to pass before compiling native Release targets. By default it also requires a clean Git worktree, so the source revision in the evidence is meaningful.
+`scripts/build_release.ps1` now requires the complete baseline/unit-test script, synthetic robustness gate and acceptance suite to pass before compiling native Release targets. By default it also requires a clean Git worktree, so the source revision in the evidence is meaningful. The final release manifest includes the robustness report as hashed `robustness-evidence`.
 
 ```powershell
 .\scripts\build_release.ps1 `

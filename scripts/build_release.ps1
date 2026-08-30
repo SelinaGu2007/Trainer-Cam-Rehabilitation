@@ -61,6 +61,7 @@ try {
 
     $ArtifactsDirectory = Join-Path $ProjectRoot "artifacts"
     $AcceptanceReport = Join-Path $ArtifactsDirectory "acceptance-report.json"
+    $RobustnessReport = Join-Path $ArtifactsDirectory "robustness-report.json"
     $ReleaseManifest = Join-Path $ArtifactsDirectory "release-manifest.json"
     & (Join-Path $PSScriptRoot "verify_baseline.ps1") -PythonCommand $Python.Source
     Invoke-Checked $Python.Source @(
@@ -113,7 +114,8 @@ try {
         "--output", $ReleaseManifest,
         "--root", "kinect-recorder=simple_3d_viewer\build\bin\Release",
         "--root", "tutor-client=build-qt-cmake\TutorClient\Release",
-        "--root", "customer-client=build-qt-cmake\CustomerClient\Release"
+        "--root", "customer-client=build-qt-cmake\CustomerClient\Release",
+        "--file", "robustness-evidence=$RobustnessReport"
     ) "Release manifest generation failed."
 
     Write-Host "Release builds completed successfully."
@@ -121,6 +123,7 @@ try {
     Write-Host "Tutor:  build-qt-cmake\TutorClient\Release\TutorClient.exe"
     Write-Host "Client: build-qt-cmake\CustomerClient\Release\CustomerClient.exe"
     Write-Host "Evidence: artifacts\acceptance-report.json"
+    Write-Host "Robustness: artifacts\robustness-report.json"
     Write-Host "Manifest: artifacts\release-manifest.json"
 } finally {
     Pop-Location

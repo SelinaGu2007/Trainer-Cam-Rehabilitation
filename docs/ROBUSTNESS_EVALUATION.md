@@ -13,6 +13,8 @@ python scripts\run_robustness_evaluation.py `
 
 The command exits non-zero when any scenario fails. The versioned output conforms to `schemas/robustness-report-v1.schema.json`.
 
+`scripts/verify_baseline.ps1` runs this command explicitly, and `scripts/build_release.ps1` invokes that baseline before native compilation. A failed robustness scenario therefore blocks Release. A successful report is included in the release manifest as hashed `robustness-evidence`.
+
 ## Scenarios
 
 The harness covers:

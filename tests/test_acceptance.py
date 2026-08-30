@@ -73,6 +73,42 @@ class AcceptanceTests(unittest.TestCase):
             hashlib.sha256(artifact.read_bytes()).hexdigest(),
         )
 
+    def test_release_manifest_includes_hashed_robustness_evidence(self):
+        acceptance_path = self.temporary / "acceptance.json"
+        acceptance_path.write_text(
+            json.dumps(
+                {
+                    "format": "trainercam.acceptance-report",
+                    "summary": {"passed": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+        bundle = self.temporary / "bundle"
+        bundle.mkdir()
+        (bundle / "client.bin").write_bytes(b"release")
+        robustness = self.temporary / "robustness.json"
+        robustness.write_text(
+            json.dumps(
+                {
+                    "format": "trainercam.robustness-report",
+                    "summary": {"passed": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+        manifest = create_release_manifest.create_release_manifest(
+            PROJECT_ROOT,
+            acceptance_path,
+            roots=[("customer-client", bundle)],
+            files=[("robustness-evidence", robustness)],
+        )
+        evidence = next(
+            item for item in manifest["artifacts"]
+            if item["component"] == "robustness-evidence"
+        )
+        self.assertEqual(evidence["sha256"], hashlib.sha256(robustness.read_bytes()).hexdigest())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,8 @@ To validate with an already configured Python interpreter:
 .\scripts\verify_baseline.ps1
 ```
 
+The baseline now runs the complete unit suite and the ten-scenario synthetic robustness gate. It writes `artifacts/robustness-report.json` and returns non-zero if active-user continuity, reassociation, jitter reduction, outlier rejection or occlusion handling regresses.
+
 The score workflow has a NumPy-only DTW and smoothing fallback. OpenCV, Matplotlib and `dtaidistance` are still required for the complete visualization and packaged application.
 
 ## Runtime configuration
@@ -67,14 +69,14 @@ The verified command-line path uses the root `CMakeLists.txt`, Visual Studio 202
     -PythonCommand "python"
 ```
 
-The unified Release script requires a clean Git worktree and a passing engineering acceptance report before compilation. `-AllowDirty` is available only for local development verification. See [ENGINEERING_ACCEPTANCE.md](ENGINEERING_ACCEPTANCE.md) for the exact checks and validation limits.
+The unified Release script requires a clean Git worktree, a passing engineering acceptance report and a passing synthetic robustness report before compilation. `-AllowDirty` is available only for local development verification. See [ENGINEERING_ACCEPTANCE.md](ENGINEERING_ACCEPTANCE.md) for the exact checks and validation limits.
 
 The Qt Release executables are written to:
 
 - `build-qt-cmake/TutorClient/Release/TutorClient.exe`
 - `build-qt-cmake/CustomerClient/Release/CustomerClient.exe`
 
-Machine-specific release evidence is written to `artifacts/acceptance-report.json` and `artifacts/release-manifest.json`. The manifest inventories the deployed Release directories with relative paths, sizes and SHA-256 values.
+Machine-specific release evidence is written to `artifacts/acceptance-report.json`, `artifacts/robustness-report.json` and `artifacts/release-manifest.json`. The manifest inventories the deployed Release directories and hashes the robustness report with relative paths, sizes and SHA-256 values.
 
 The existing `.pro` files can still be opened in Qt Creator, but CMake is the reproducible command-line baseline.
 
